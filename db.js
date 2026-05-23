@@ -341,8 +341,14 @@ async function query(text, params = []) {
   try {
     return await pool.query(text, params);
   } catch (error) {
-    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || /connect/i.test(error.message)) {
-      showFallbackNotice(error.code || 'connection error');
+    if (
+      error.code === 'ECONNREFUSED' ||
+      error.code === 'ENOTFOUND' ||
+      error.code === '28P01' || // Password authentication failed
+      /connect/i.test(error.message) ||
+      /authentication/i.test(error.message)
+    ) {
+      showFallbackNotice(error.code || 'connection/auth error');
       return jsonQuery(text, params);
     }
     throw error;

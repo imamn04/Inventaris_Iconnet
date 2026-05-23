@@ -734,7 +734,9 @@ const sslPath = {
     cert: path.join(__dirname, 'cert.pem')
 };
 
-if (fs.existsSync(sslPath.key) && fs.existsSync(sslPath.cert)) {
+const disableSSL = process.env.DISABLE_SSL === 'true';
+
+if (!disableSSL && fs.existsSync(sslPath.key) && fs.existsSync(sslPath.cert)) {
     const options = {
         key: fs.readFileSync(sslPath.key),
         cert: fs.readFileSync(sslPath.cert)
