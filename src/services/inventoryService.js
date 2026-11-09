@@ -194,13 +194,56 @@ async function deleteInventoryItem(id) {
 }
 
 async function checkItemScan(searchValue) {
-  const trimmed = searchValue.trim();
+  if (!searchValue) {
+    return { success: false, status: 'not_found' };
+  }
+
+  let raw = String(searchValue).trim();
+  const searchValues = new Set();
+  if (raw) searchValues.add(raw);
+
+  // 1. Parse JSON if scanned QR contains JSON object
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.id) searchValues.add(String(parsed.id).trim());
+      if (parsed.sn) searchValues.add(String(parsed.sn).trim());
+      if (parsed.sn_converter) searchValues.add(String(parsed.sn_converter).trim());
+    }
+  } catch (e) {
+    // Not JSON
+  }
+
+  // 2. Check pipe-delimited format
+  if (raw.includes('|')) {
+    raw.split('|').forEach(part => {
+      const p = part.trim();
+      if (p) searchValues.add(p);
+    });
+  }
+
+  // 3. Extract standard INV pattern (e.g. INV-001, INV-050)
+  const invMatch = raw.match(/INV-?\d+/i);
+  if (invMatch) {
+    searchValues.add(invMatch[0]);
+    const digits = invMatch[0].replace(/\D/g, '');
+    if (digits) {
+      searchValues.add(`INV-${digits.padStart(3, '0')}`);
+      searchValues.add(`INV-${digits}`);
+    }
+  }
+
+  // Build OR conditions with case-insensitive matching
+  const conditions = [];
+  for (const val of searchValues) {
+    conditions.push({ id: { equals: val, mode: 'insensitive' } });
+    conditions.push({ sn: { equals: val, mode: 'insensitive' } });
+    conditions.push({ snConverter: { equals: val, mode: 'insensitive' } });
+  }
+
   const item = await prisma.inventory.findFirst({
     where: {
-      OR: [
-        { id: { equals: trimmed } },
-        { sn: { equals: trimmed } }
-      ]
+      OR: conditions
     }
   });
 

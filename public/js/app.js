@@ -2277,6 +2277,8 @@ function initScanPage() {
         closeScannerBtn.addEventListener('click', stopCamera);
     }
 
+    setupScannerControls();
+
     // Reset button
     if (resetBtn) {
         resetBtn.addEventListener('click', async function () {
@@ -2342,91 +2344,252 @@ function initScanPage() {
     }
 }
 
+let availableCameras = [];
+let currentCameraIndex = 0;
+
+function setupScannerControls() {
+    const photoScanBtn = document.getElementById('photoScanBtn');
+    const btnCapturePhotoFallback = document.getElementById('btnCapturePhotoFallback');
+    const scanFileInput = document.getElementById('scanFileInput');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+
+    if (photoScanBtn && !photoScanBtn.dataset.bound) {
+        photoScanBtn.dataset.bound = 'true';
+        photoScanBtn.addEventListener('click', triggerPhotoScan);
+    }
+
+    if (btnCapturePhotoFallback && !btnCapturePhotoFallback.dataset.bound) {
+        btnCapturePhotoFallback.dataset.bound = 'true';
+        btnCapturePhotoFallback.addEventListener('click', triggerPhotoScan);
+    }
+
+    if (scanFileInput && !scanFileInput.dataset.bound) {
+        scanFileInput.dataset.bound = 'true';
+        scanFileInput.addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                handleScanFile(e.target.files[0]);
+                e.target.value = '';
+            }
+        });
+    }
+
+    if (switchCameraBtn && !switchCameraBtn.dataset.bound) {
+        switchCameraBtn.dataset.bound = 'true';
+        switchCameraBtn.addEventListener('click', switchCamera);
+    }
+
+    if (cameraSelect && !cameraSelect.dataset.bound) {
+        cameraSelect.dataset.bound = 'true';
+        cameraSelect.addEventListener('change', function() {
+            if (this.value) {
+                stopCamera().then(() => {
+                    startCamera(this.value);
+                });
+            }
+        });
+    }
+}
+
+function triggerPhotoScan() {
+    const fileInput = document.getElementById('scanFileInput');
+    if (fileInput) {
+        fileInput.click();
+    }
+}
+
+async function handleScanFile(file) {
+    if (!file) return;
+    showToast('Memproses & memindai foto barcode...', false, 2500);
+
+    let scannerInstance = null;
+    try {
+        if (typeof Html5Qrcode === 'undefined') {
+            showToast('Library pemindai belum siap. Silakan muat ulang halaman.', true);
+            return;
+        }
+
+        scannerInstance = new Html5Qrcode("reader");
+        const decodedText = await scannerInstance.scanFile(file, true);
+        if (decodedText) {
+            onScanSuccess(decodedText, null);
+        } else {
+            showToast('Barcode / QR tidak terdeteksi. Pastikan foto cukup dekat dan jelas.', true);
+        }
+    } catch (err) {
+        console.error("Gagal membaca barcode dari file/foto:", err);
+        showToast('Barcode tidak terbaca dari foto. Pastikan gambar jelas & tegak lurus.', true);
+    } finally {
+        if (scannerInstance) {
+            try { await scannerInstance.clear(); } catch(e) {}
+        }
+    }
+}
+
+async function switchCamera() {
+    if (!availableCameras || availableCameras.length < 2) return;
+    currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+    const nextCamera = availableCameras[currentCameraIndex];
+    const cameraSelect = document.getElementById('cameraSelect');
+    if (cameraSelect) cameraSelect.value = nextCamera.id;
+    await stopCamera();
+    startCamera(nextCamera.id);
+}
+
 function toggleCamera() {
     const scannerContainer = document.getElementById('scannerContainer');
-    const scanInput = document.getElementById('scanInput');
+    if (!scannerContainer) return;
 
-    if (scannerContainer.style.display === 'none') {
-        scannerContainer.style.display = 'block';
+    if (scannerContainer.style.display === 'none' || !html5QrcodeScanner) {
         startCamera();
     } else {
         stopCamera();
     }
 }
 
-function startCamera() {
+async function startCamera(preferredCameraId = null) {
+    if (typeof Html5Qrcode === 'undefined') {
+        showToast('Library barcode scanner belum siap. Silakan refresh halaman.', true);
+        return;
+    }
+
+    const scannerContainer = document.getElementById('scannerContainer');
+    if (scannerContainer) scannerContainer.style.display = 'block';
+
     if (html5QrcodeScanner) {
         return;
     }
 
-    // Check if Secure Context (HTTPS)
+    // Check mediaDevices support
+    const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    if (!isSecure) {
-        showToast('Kamera membutuhkan HTTPS untuk berjalan di HP!', true);
-        alert('Fitur kamera di HP diblokir browser karena menggunakan HTTP biasa. \n\nSolusi: \n1. Gunakan Ngrok untuk mendapatkan link HTTPS \n2. Atau buka chrome://flags/#unsafely-treat-insecure-origin-as-secure di Chrome HP dan masukkan IP komputer Anda.');
+    // In modern browsers, live camera requires HTTPS on mobile/LAN IP
+    if (!hasMediaDevices || (!isSecure && !navigator.mediaDevices)) {
+        showToast('Browser membatasi kamera live di IP HTTP LAN. Mengalihkan ke Foto Barcode...', false, 4000);
+        triggerPhotoScan();
         return;
     }
 
-    html5QrcodeScanner = new Html5Qrcode("reader");
+    try {
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        const config = { 
+            fps: 15, 
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                const edge = Math.floor(minEdge * 0.72);
+                return { width: Math.max(edge, 180), height: Math.max(edge, 180) };
+            },
+            aspectRatio: 1.0
+        };
 
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        // Try enumerating cameras
+        try {
+            availableCameras = await Html5Qrcode.getCameras();
+        } catch (e) {
+            console.warn('Enumerate cameras failed:', e);
+            availableCameras = [];
+        }
 
-    html5QrcodeScanner.start(
-        { facingMode: "environment" },
-        config,
-        onScanSuccess,
-        onScanFailure
-    ).catch(err => {
+        const cameraSelect = document.getElementById('cameraSelect');
+        const switchCameraBtn = document.getElementById('switchCameraBtn');
+
+        if (availableCameras && availableCameras.length > 0) {
+            if (cameraSelect) {
+                cameraSelect.innerHTML = availableCameras.map((c, i) => 
+                    `<option value="${c.id}">${c.label || ('Kamera ' + (i + 1))}</option>`
+                ).join('');
+                if (availableCameras.length > 1) {
+                    cameraSelect.style.display = 'inline-block';
+                    if (switchCameraBtn) switchCameraBtn.style.display = 'inline-block';
+                }
+            }
+
+            let targetCameraId = preferredCameraId;
+            if (!targetCameraId) {
+                const backCam = availableCameras.find(c => /back|rear|environment|belakang/i.test(c.label));
+                targetCameraId = backCam ? backCam.id : availableCameras[0].id;
+            }
+
+            currentCameraIndex = availableCameras.findIndex(c => c.id === targetCameraId);
+            if (currentCameraIndex === -1) currentCameraIndex = 0;
+            if (cameraSelect) cameraSelect.value = targetCameraId;
+
+            await html5QrcodeScanner.start(targetCameraId, config, onScanSuccess, onScanFailure);
+        } else {
+            // No camera list returned yet, attempt direct start with environment fallback
+            try {
+                await html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+            } catch (errEnv) {
+                console.warn("FacingMode environment failed, trying user camera:", errEnv);
+                await html5QrcodeScanner.start({ facingMode: "user" }, config, onScanSuccess, onScanFailure);
+            }
+        }
+        showToast('Kamera aktif! Arahkan ke barcode / QR code.');
+    } catch (err) {
         console.error("Error starting camera:", err);
-        showToast('Gagal mengakses kamera! Pastikan izin diberikan.', true);
-    });
+        if (html5QrcodeScanner) {
+            try { await html5QrcodeScanner.stop(); } catch(e) {}
+            try { await html5QrcodeScanner.clear(); } catch(e) {}
+            html5QrcodeScanner = null;
+        }
+        showToast('Kamera langsung terkendala izin. Mengalihkan ke Foto Barcode...', true, 4000);
+        triggerPhotoScan();
+    }
 }
 
-function stopCamera() {
+async function stopCamera() {
     const scannerContainer = document.getElementById('scannerContainer');
 
     if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().then(() => {
-            html5QrcodeScanner = null;
-            scannerContainer.style.display = 'none';
-        }).catch(err => {
+        try {
+            await html5QrcodeScanner.stop();
+        } catch (err) {
             console.error("Error stopping camera:", err);
-            html5QrcodeScanner = null;
-            scannerContainer.style.display = 'none';
-        });
-    } else {
+        }
+        try {
+            await html5QrcodeScanner.clear();
+        } catch (err) {
+            console.error("Error clearing camera element:", err);
+        }
+        html5QrcodeScanner = null;
+    }
+
+    if (scannerContainer) {
         scannerContainer.style.display = 'none';
     }
 }
 
 function onScanSuccess(decodedText, decodedResult) {
-    // Handle the scanned code
     const scanInput = document.getElementById('scanInput');
 
-    // Parse JSON if QR contains data like {"id":"INV-001","name":"monitor",...}
-    let searchId = decodedText;
+    let searchId = String(decodedText).trim();
     try {
         const parsed = JSON.parse(decodedText);
-        // Extract ID from JSON object
-        searchId = parsed.id || decodedText;
+        if (parsed && typeof parsed === 'object') {
+            searchId = parsed.id || parsed.sn || decodedText;
+        }
     } catch (e) {
-        // Not JSON, use as-is
-        searchId = decodedText;
+        if (searchId.includes('|')) {
+            const parts = searchId.split('|').map(s => s.trim()).filter(Boolean);
+            searchId = parts[0] || searchId;
+        }
     }
 
-    scanInput.value = searchId;
+    if (scanInput) {
+        scanInput.value = searchId;
+    }
     performScan();
     stopCamera();
 }
 
 function onScanFailure(error) {
-    // Handle scan failure, usually better to ignore and keep scanning
+    // Continuous scanning, ignore normal per-frame scan misses
 }
 
 async function performScan() {
     const scanInput = document.getElementById('scanInput');
-    const searchValue = scanInput.value.trim().toUpperCase();
+    const searchValue = (scanInput.value || '').trim();
 
     if (!searchValue) {
         showToast('Mohon masukkan ID atau barcode', true);
