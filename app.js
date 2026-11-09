@@ -552,9 +552,27 @@ function updateRecentActivities() {
     }
 }
 
-// Helper to get cubicle_id consistently
+// Helper to extract cubicle code from any location string (e.g. "A-01", "Cubicle B-04", "a01")
+function extractCubicleId(lokasiStr) {
+    if (!lokasiStr || typeof lokasiStr !== 'string') return '';
+    const match = lokasiStr.trim().match(/\b([A-Fa-f])-?0*([1-9]|[1-3][0-9])\b/);
+    if (match) {
+        const block = match[1].toUpperCase();
+        const num = String(parseInt(match[2], 10)).padStart(2, '0');
+        return `${block}-${num}`;
+    }
+    return '';
+}
+
+// Helper to get cubicle_id consistently (from cubicle_id property or auto-extracted from lokasi)
 function getCubicleId(item) {
-    return item.cubicle_id || item.cubicleId || '';
+    if (!item) return '';
+    if (item.cubicle_id && String(item.cubicle_id).trim()) return String(item.cubicle_id).trim().toUpperCase();
+    if (item.cubicleId && String(item.cubicleId).trim()) return String(item.cubicleId).trim().toUpperCase();
+    if (item.lokasi) {
+        return extractCubicleId(item.lokasi);
+    }
+    return '';
 }
 
 function renderDashboardMap() {
@@ -1209,6 +1227,21 @@ function updateLiveAssetPreview() {
     if (liveMerk) liveMerk.textContent = merk || '-';
     if (liveSn) liveSn.textContent = sn || '-';
 
+    // Live Cubicle Link Badge
+    const locInput = document.getElementById('itemLocation');
+    const locVal = locInput ? locInput.value.trim() : '';
+    const cubicleMatch = extractCubicleId(locVal);
+    const linkBadge = document.getElementById('liveCubicleLinkBadge');
+    const cubicleNameEl = document.getElementById('liveCubicleName');
+    if (linkBadge && cubicleNameEl) {
+        if (cubicleMatch) {
+            cubicleNameEl.textContent = cubicleMatch;
+            linkBadge.style.display = 'inline-flex';
+        } else {
+            linkBadge.style.display = 'none';
+        }
+    }
+
     if (liveStatusText) liveStatusText.textContent = kondisiAfter;
     if (liveStatusPill) {
         liveStatusPill.className = 'asset-status-pill';
@@ -1237,12 +1270,16 @@ window.updateLiveAssetPreview = updateLiveAssetPreview;
 async function handleInventorySubmit(e) {
     e.preventDefault();
 
+    const rawLoc = document.getElementById('itemLocation').value;
+    const resolvedCubicle = extractCubicleId(rawLoc);
+
     const newItem = {
         name: document.getElementById('itemName').value,
         merk: document.getElementById('itemMerk').value,
         sn: document.getElementById('itemSn').value,
         snConverter: document.getElementById('itemSnConverter').value,
-        lokasi: document.getElementById('itemLocation').value,
+        lokasi: rawLoc,
+        cubicle_id: resolvedCubicle,
         kondisiBefore: document.getElementById('itemKondisiBefore').value,
         checklist: document.getElementById('itemChecklist').value,
         kondisiAfter: document.getElementById('itemKondisiAfter').value,
@@ -1305,9 +1342,18 @@ async function handleInventorySubmit(e) {
         document.getElementById('qrItemId').textContent = 'ID: ' + savedItem.id;
         document.getElementById('printQrBtn').classList.add('show');
 
-        showToast('Item berhasil ditambahkan!');
+        showToast(resolvedCubicle ? `Item berhasil ditambahkan & terhubung ke Kubikel ${resolvedCubicle}!` : 'Item berhasil ditambahkan!');
         document.getElementById('inventoryForm').reset();
         document.getElementById('itemDate').valueAsDate = new Date();
+        const badge = document.getElementById('liveCubicleLinkBadge');
+        if (badge) badge.style.display = 'none';
+
+        // Instant refresh for map views and dashboard
+        loadInventory().then(() => {
+            renderDashboardMap();
+            renderMap();
+            updateDashboard();
+        });
     }
 }
 
@@ -1620,12 +1666,16 @@ function editItem(id) {
 
 async function saveEdit() {
     const id = document.getElementById('editItemId').value;
+    const rawLoc = document.getElementById('editLocation').value;
+    const resolvedCubicle = extractCubicleId(rawLoc);
+
     const updatedItem = {
         name: document.getElementById('editItemName').value,
         merk: document.getElementById('editMerk').value,
         sn: document.getElementById('editSn').value,
         snConverter: document.getElementById('editSnConverter').value,
-        lokasi: document.getElementById('editLocation').value,
+        lokasi: rawLoc,
+        cubicle_id: resolvedCubicle,
         kondisiBefore: document.getElementById('editKondisiBefore').value,
         checklist: document.getElementById('editChecklist').value,
         kondisiAfter: document.getElementById('editKondisiAfter').value,
@@ -1675,6 +1725,9 @@ async function saveEdit() {
     if (success) {
         closeModal('editModal');
         showToast('Item berhasil diperbarui! QR Code telah digenerate.');
+        renderDashboardMap();
+        renderMap();
+        updateDashboard();
     }
 }
 
@@ -5287,6 +5340,8 @@ async function loadCubiclePositions() {
         cubiclePositions = await res.json();
         isDataLoaded = true;
 
+        populateCubicleSuggestions();
+
         // Trigger renders if we are on dashboard or map pages
         renderDashboardMap();
         renderMap();
@@ -5299,6 +5354,19 @@ async function loadCubiclePositions() {
         console.error('Error loading positions:', e);
         cubiclePositions = [];
     }
+}
+
+function populateCubicleSuggestions() {
+    const datalist = document.getElementById('cubicleSuggestions');
+    if (!datalist || !cubiclePositions || cubiclePositions.length === 0) return;
+
+    const validCubicles = cubiclePositions
+        .filter(p => p.type !== 'label' && p.cubicle_id && !p.cubicle_id.startsWith('LABEL_'))
+        .map(p => p.cubicle_id)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+    const uniqueCubicles = [...new Set(validCubicles)];
+    datalist.innerHTML = uniqueCubicles.map(id => `<option value="${id}">Kubikel ${id}</option>`).join('');
 }
 
 async function renderMap() {
@@ -5326,7 +5394,7 @@ function renderNormalView() {
     const poolContainer = document.getElementById('unassignedPool');
     if (!mapContainer || !poolContainer) return;
 
-    const unassigned = inventoryData.filter(item => !item.cubicle_id);
+    const unassigned = inventoryData.filter(item => !getCubicleId(item));
     poolContainer.innerHTML = unassigned.map(item => `
         <div class="pool-item" draggable="true" ondragstart="dragItemToMap(event, '${item.id}')">
             <h4>${item.name}</h4>
@@ -5349,7 +5417,7 @@ function renderNormalView() {
         }
 
         const cubicleId = pos.cubicle_id;
-        const items = inventoryData.filter(inv => inv.cubicle_id === cubicleId);
+        const items = inventoryData.filter(inv => getCubicleId(inv) === cubicleId);
         const isOccupied = items.length > 0;
 
         const div = document.createElement('div');
@@ -5690,7 +5758,10 @@ async function handleCubicleClick(cubicleId) {
                         <span><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</span>
                     </div>
                 </div>
-                <div class="item-actions" style="margin-left: 10px;">
+                <div class="item-actions" style="margin-left: 10px; display: flex; gap: 8px;">
+                    <button class="action-btn-mini" onclick="closeModal('cubicleDetailModal'); openPassportModal('${item.id}')" title="Buka Passport & Detail Aset" style="width: 36px; height: 36px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                        <i class="fas fa-eye"></i>
+                    </button>
                     <button class="unassign-btn" onclick="assignItemToCubicle('${item.id}', '')" title="Keluarkan dari kubikel" style="width: 36px; height: 36px; border-radius: 10px;">
                         <i class="fas fa-sign-out-alt"></i>
                     </button>

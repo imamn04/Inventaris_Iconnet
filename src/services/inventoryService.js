@@ -55,6 +55,17 @@ function parseIndonesianDate(dateStr) {
   return isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function extractCubicleId(lokasiStr) {
+  if (!lokasiStr || typeof lokasiStr !== 'string') return '';
+  const match = lokasiStr.trim().match(/\b([A-Fa-f])-?0*([1-9]|[1-3][0-9])\b/);
+  if (match) {
+    const block = match[1].toUpperCase();
+    const num = String(parseInt(match[2], 10)).padStart(2, '0');
+    return `${block}-${num}`;
+  }
+  return '';
+}
+
 async function getAllInventory() {
   const items = await prisma.inventory.findMany({
     orderBy: { no: 'asc' }
@@ -85,6 +96,9 @@ async function createInventoryItem(data) {
 
   const tanggalMasuk = parseIndonesianDate(data.tanggalMasuk || data.date);
   const dateVal = parseIndonesianDate(data.date);
+  const cubicleId = (data.cubicle_id || data.cubicleId)
+    ? (data.cubicle_id || data.cubicleId).trim().toUpperCase()
+    : extractCubicleId(data.lokasi);
 
   const created = await prisma.inventory.create({
     data: {
@@ -102,8 +116,7 @@ async function createInventoryItem(data) {
       tanggalMasuk: tanggalMasuk,
       date: dateVal,
       qrCode: qrCode,
-      cubicleId: data.cubicle_id || '',
-      checkTime: null
+      cubicleId: cubicleId || ''
     }
   });
 
@@ -125,6 +138,16 @@ async function updateInventoryItem(id, data) {
   const dateVal = data.date !== undefined ? parseIndonesianDate(data.date) : current.date;
   const checkTime = data.checkTime ? new Date(data.checkTime) : current.checkTime;
 
+  let cubicleIdVal = current.cubicleId;
+  if (data.cubicle_id !== undefined || data.cubicleId !== undefined) {
+    cubicleIdVal = (data.cubicle_id || data.cubicleId || '').trim().toUpperCase();
+  } else if (data.lokasi !== undefined) {
+    const extracted = extractCubicleId(data.lokasi);
+    if (extracted) {
+      cubicleIdVal = extracted;
+    }
+  }
+
   const updated = await prisma.inventory.update({
     where: { id },
     data: {
@@ -140,8 +163,7 @@ async function updateInventoryItem(id, data) {
       tanggalMasuk: tanggalMasuk,
       date: dateVal,
       qrCode: data.qrCode !== undefined ? data.qrCode : current.qrCode,
-      cubicleId: data.cubicle_id !== undefined ? data.cubicle_id : current.cubicleId,
-      checkTime: checkTime
+      cubicleId: cubicleIdVal
     }
   });
 
@@ -181,8 +203,7 @@ async function checkItemScan(searchValue) {
     const updated = await prisma.inventory.update({
       where: { id: item.id },
       data: {
-        checklist: 'Ya',
-        checkTime: now
+        checklist: 'Ya'
       }
     });
 
@@ -204,8 +225,7 @@ async function checkItemScan(searchValue) {
 async function resetAllChecklist() {
   await prisma.inventory.updateMany({
     data: {
-      checklist: 'Tidak',
-      checkTime: null
+      checklist: 'Tidak'
     }
   });
 
@@ -257,6 +277,9 @@ async function importInventoryItems(items) {
 
     const tanggalMasuk = parseIndonesianDate(item.tanggalMasuk || item.date);
     const dateVal = parseIndonesianDate(item.date);
+    const cubicleId = (item.cubicle_id || item.cubicleId)
+      ? (item.cubicle_id || item.cubicleId).trim().toUpperCase()
+      : extractCubicleId(item.lokasi);
 
     await prisma.inventory.upsert({
       where: { id },
@@ -271,7 +294,8 @@ async function importInventoryItems(items) {
         kondisiAfter: item.kondisiAfter || item.kondisi_after || '',
         catatan: item.catatan || '',
         tanggalMasuk,
-        date: dateVal
+        date: dateVal,
+        cubicleId: cubicleId || undefined
       },
       create: {
         id,
@@ -287,7 +311,8 @@ async function importInventoryItems(items) {
         catatan: item.catatan || '',
         tanggalMasuk,
         date: dateVal,
-        qrCode: ''
+        qrCode: '',
+        cubicleId: cubicleId || ''
       }
     });
 
@@ -302,12 +327,16 @@ async function assignCubicle(itemId, cubicleId) {
   const item = await prisma.inventory.findUnique({ where: { id: itemId } });
   if (!item) return null;
 
+  const targetCubicle = cubicleId ? cubicleId.trim().toUpperCase() : '';
   const updated = await prisma.inventory.update({
     where: { id: itemId },
-    data: { cubicleId: cubicleId || '' }
+    data: {
+      cubicleId: targetCubicle,
+      lokasi: targetCubicle || item.lokasi || '-'
+    }
   });
 
-  await logHistory('UPDATE', { id: itemId }, `Assign item ke kubikel: ${cubicleId || 'Unassigned'}`);
+  await logHistory('UPDATE', { id: itemId }, `Assign item ke kubikel: ${targetCubicle || 'Unassigned'}`);
   return mapInventory(updated);
 }
 
