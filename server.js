@@ -53,6 +53,26 @@ async function startServer() {
     await prisma.$connect();
     console.log('[Database] Connected to MySQL successfully via Prisma ORM.');
 
+    // Seed default admin if user table empty
+    try {
+      const userCount = await prisma.user.count();
+      if (userCount === 0) {
+        const bcrypt = require('bcryptjs');
+        const hash = await bcrypt.hash('admin123', 10);
+        await prisma.user.create({
+          data: {
+            username: 'admin',
+            password: hash,
+            name: 'Administrator',
+            role: 'admin'
+          }
+        });
+        console.log('[Database] Akun admin default dibuat: username="admin", password="admin123"');
+      }
+    } catch (e) {
+      // Abaikan jika tabel belum siap
+    }
+
     const server = app.listen(PORT, () => {
       console.log(`[Server] Iconnet Inventory System running on port ${PORT}`);
       console.log(`[URL] http://localhost:${PORT}`);

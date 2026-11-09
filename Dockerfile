@@ -31,13 +31,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Install runtime dependencies for Prisma engine
+RUN apk add --no-cache libc6-compat openssl
+
 # Security: Jalankan sebagai non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 appuser
 
 # Copy built node_modules and Prisma Client from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder --chown=appuser:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:nodejs /app/prisma ./prisma
 
 # Copy application source code
 COPY --chown=appuser:nodejs package*.json ./
