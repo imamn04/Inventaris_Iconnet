@@ -40,7 +40,7 @@ const helmetMiddleware = helmet({
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
-      upgradeInsecureRequests: isProduction ? [] : null
+      upgradeInsecureRequests: process.env.ENABLE_HTTPS_UPGRADE === 'true' ? [] : null
     }
   },
   crossOriginEmbedderPolicy: false

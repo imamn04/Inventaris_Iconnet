@@ -45,7 +45,7 @@ function parsePostgresCopy(sqlContent, tableName) {
 }
 
 async function main() {
-  console.log('--- Starting Database Seeding & Migration to MySQL ---');
+  console.log('--- Starting Database Seeding & Migration to PostgreSQL ---');
   const sqlFile = path.join(__dirname, '../iventaris_db.sql');
   if (!fs.existsSync(sqlFile)) {
     console.error('SQL dump file not found at:', sqlFile);
@@ -63,15 +63,13 @@ async function main() {
       where: { username: u.username },
       update: {
         name: u.name,
-        password: hashedPassword,
-        role: 'admin'
+        password: hashedPassword
       },
       create: {
         id: parseInt(u.id, 10),
         username: u.username,
         password: hashedPassword,
-        name: u.name,
-        role: 'admin'
+        name: u.name
       }
     });
   }
@@ -84,8 +82,7 @@ async function main() {
       data: {
         username: 'admin',
         password: hashedPassword,
-        name: 'Administrator Iconnet',
-        role: 'admin'
+        name: 'Administrator Iconnet'
       }
     });
     console.log('Created default admin user: admin / admin123');

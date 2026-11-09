@@ -76,6 +76,9 @@ async function bulkDelete(req, res, next) {
 async function importItems(req, res, next) {
   try {
     const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Data import harus berupa array item inventaris' });
+    }
     const result = await inventoryService.importInventoryItems(items);
     res.json({ success: true, count: result.count });
   } catch (err) {

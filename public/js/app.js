@@ -402,6 +402,12 @@ function setupEventListeners() {
         exportHandoverPdf.addEventListener('click', exportHandoverToPdf);
     }
 
+    // Handover delete selected button
+    const deleteHandoverSelectedBtn = document.getElementById('deleteHandoverSelectedBtn');
+    if (deleteHandoverSelectedBtn) {
+        deleteHandoverSelectedBtn.addEventListener('click', deleteSelectedHandover);
+    }
+
     // Show/hide SN Converter based on item name
     document.getElementById('itemName').addEventListener('change', function () {
         const snConverterRow = document.getElementById('snConverterRow');
@@ -1330,6 +1336,32 @@ function renderCategoryOptions() {
         `;
         if (currentEditVal) {
             editItemNameSelect.value = currentEditVal;
+        }
+    }
+
+    // 4. Form Serah Terima
+    const handoverKatSelect = document.getElementById('handoverKategori');
+    if (handoverKatSelect) {
+        const currentHandoverVal = handoverKatSelect.value;
+        handoverKatSelect.innerHTML = `
+            <option value="">Pilih Kategori</option>
+            ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
+        `;
+        if (currentHandoverVal && categoriesData.includes(currentHandoverVal)) {
+            handoverKatSelect.value = currentHandoverVal;
+        }
+    }
+
+    // 5. Filter Cek Inventaris (Scan Barcode Page)
+    const scanFilterSelect = document.getElementById('scanFilter');
+    if (scanFilterSelect) {
+        const currentScanFilter = scanFilterSelect.value;
+        scanFilterSelect.innerHTML = `
+            <option value="all">Semua</option>
+            ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
+        `;
+        if (currentScanFilter && (currentScanFilter === 'all' || categoriesData.includes(currentScanFilter))) {
+            scanFilterSelect.value = currentScanFilter;
         }
     }
 }
@@ -2414,12 +2446,6 @@ function initScanPage() {
             scanPage = 1;
             renderScanTable();
         });
-    }
-
-    // Handover delete selected button
-    const deleteHandoverSelectedBtn = document.getElementById('deleteHandoverSelectedBtn');
-    if (deleteHandoverSelectedBtn) {
-        deleteHandoverSelectedBtn.addEventListener('click', deleteSelectedHandover);
     }
 }
 

@@ -7,7 +7,8 @@ async function getStats() {
     return prisma.inventory.count({
       where: {
         name: {
-          contains: keyword
+          contains: keyword,
+          mode: 'insensitive'
         }
       }
     });

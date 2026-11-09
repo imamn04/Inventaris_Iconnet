@@ -65,8 +65,7 @@ async function startServer() {
           data: {
             username: 'admin',
             password: hash,
-            name: 'Administrator',
-            role: 'admin'
+            name: 'Administrator'
           }
         });
         console.log('[Database] Akun admin default dibuat: username="admin", password="admin123"');
@@ -96,7 +95,7 @@ async function startServer() {
       console.log(`[Server] Received ${signal}, closing server gracefully...`);
       server.close(async () => {
         await prisma.$disconnect();
-        console.log('[Database] Disconnected from MySQL.');
+        console.log('[Database] Disconnected from PostgreSQL.');
         process.exit(0);
       });
     };
@@ -105,7 +104,7 @@ async function startServer() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   } catch (err) {
-    console.error('[Startup Error] Failed to connect to MySQL database:', err.message);
+    console.error('[Startup Error] Failed to connect to PostgreSQL database:', err.message);
     process.exit(1);
   }
 }
