@@ -47,8 +47,10 @@ async function generate() {
         }
 
         if (pems && pems.private && pems.cert) {
-            fs.writeFileSync(path.join(__dirname, 'key.pem'), pems.private);
-            fs.writeFileSync(path.join(__dirname, 'cert.pem'), pems.cert);
+            const sslDir = path.join(__dirname, '../nginx/ssl');
+            if (!fs.existsSync(sslDir)) fs.mkdirSync(sslDir, { recursive: true });
+            fs.writeFileSync(path.join(sslDir, 'key.pem'), pems.private);
+            fs.writeFileSync(path.join(sslDir, 'cert.pem'), pems.cert);
             console.log('\n✅ BERHASIL!');
             console.log(`Sertifikat mendukung IP: ${localIp}`);
             console.log('Sekarang jalankan: npm start');

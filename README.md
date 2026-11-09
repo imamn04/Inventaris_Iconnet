@@ -52,6 +52,51 @@
 
 ---
 
+## 📁 Struktur Folder Proyek (Clean Architecture)
+
+Proyek ini telah distrukturisasi mengikuti kaidah fundamental pemisahan tanggung jawab (*Separation of Concerns*) antara Frontend dan Backend:
+
+```
+Inventaris_Iconnet/
+├── public/                      # 🎨 FRONTEND ASSETS
+│   ├── css/
+│   │   └── style.css            # Desain antarmuka & responsivitas
+│   ├── js/
+│   │   └── app.js               # Client logic, denah kantor & manipulasi DOM
+│   ├── img/                     # Logo, background login, favicon
+│   ├── index.html               # Halaman utama aplikasi (SPA)
+│   ├── login.html               # Halaman autentikasi pengguna
+│   └── manifest.json            # Web App Manifest
+│
+├── src/                         # ⚙️ BACKEND (Clean MVC Layered Architecture)
+│   ├── config/                  # Koneksi database & konfigurasi Prisma
+│   ├── controllers/             # Handler request/response HTTP
+│   ├── middlewares/             # Security (Helmet, CORS, Rate Limit), Validator, Error Handler
+│   ├── routes/                  # Definisi endpoint RESTful API (/api/*)
+│   ├── services/                # Logika bisnis inti (Business Logic Layer)
+│   └── validators/              # Skema validasi data request (Zod)
+│
+├── prisma/                      # 🗄️ Database ORM Schema (PostgreSQL)
+│   ├── schema.prisma
+│   └── seed.js
+│
+├── scripts/                     # 🛠️ Script Utilitas & Pengujian
+│   ├── test-integration.js      # Otomasi pengujian integrasi API
+│   ├── create-cert.js           # Pembuat sertifikat SSL lokal
+│   └── list-users.js            # Inspeksi akun terdaftar
+│
+├── nginx/                       # 🌐 Konfigurasi Web Server Reverse Proxy & SSL
+│   ├── conf.d/default.conf
+│   └── ssl/
+│
+├── barcode/                     # 📦 Penyimpanan file fisik QR Code unit aset
+├── server.js                    # 🚀 Entrypoint server Express.js
+├── Dockerfile                   # Multi-stage container build
+└── docker-compose.yml           # Orkestrator Docker (PostgreSQL 16 + Node.js + Nginx)
+```
+
+---
+
 ## ⚙️ Cara Menjalankan Aplikasi
 
 ### Opsi 1: Menjalankan Secara Lokal (Node.js & PostgreSQL)

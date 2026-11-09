@@ -44,11 +44,10 @@ COPY --from=builder --chown=appuser:nodejs /app/prisma ./prisma
 
 # Copy application source code
 COPY --chown=appuser:nodejs package*.json ./
-COPY --chown=appuser:nodejs server.js db.js ./
+COPY --chown=appuser:nodejs server.js db.js test-integration.js ./
 COPY --chown=appuser:nodejs src ./src
-COPY --chown=appuser:nodejs css ./css
-COPY --chown=appuser:nodejs img ./img
-COPY --chown=appuser:nodejs index.html login.html manifest.json app.js ./
+COPY --chown=appuser:nodejs public ./public
+COPY --chown=appuser:nodejs scripts ./scripts
 
 # Create barcode directory with proper write permissions for non-root user
 RUN mkdir -p /app/barcode && chown -R appuser:nodejs /app/barcode

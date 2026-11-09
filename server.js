@@ -20,28 +20,30 @@ app.use(corsMiddleware);
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static Asset Directories
+// Storage Directory for generated barcodes
 const barcodeDir = path.join(__dirname, 'barcode');
 if (!fs.existsSync(barcodeDir)) {
   fs.mkdirSync(barcodeDir, { recursive: true });
 }
 app.use('/barcode', express.static(barcodeDir));
-app.use('/css', express.static(path.join(__dirname, 'css')));
-app.use('/img', express.static(path.join(__dirname, 'img')));
 
-// Static HTML assets served directly
-app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
-app.get('/index.html', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/manifest.json', (req, res) => res.sendFile(path.join(__dirname, 'manifest.json')));
-app.get('/app.js', (req, res) => res.sendFile(path.join(__dirname, 'app.js')));
-
-// Mount API routes with rate limiter
-app.use('/api', apiLimiter, apiRoutes);
+// Serve Frontend Static Files from public directory (HTML, CSS, JS, Images)
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
 
 // Root route redirect to login
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
+  res.sendFile(path.join(publicDir, 'login.html'));
 });
+
+// Backward compatibility routes for direct file requests
+app.get('/login.html', (req, res) => res.sendFile(path.join(publicDir, 'login.html')));
+app.get('/index.html', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('/manifest.json', (req, res) => res.sendFile(path.join(publicDir, 'manifest.json')));
+app.get('/app.js', (req, res) => res.sendFile(path.join(publicDir, 'js', 'app.js')));
+
+// Mount API routes with rate limiter
+app.use('/api', apiLimiter, apiRoutes);
 
 // Centralized Error Handling Middleware
 app.use(errorHandler);
