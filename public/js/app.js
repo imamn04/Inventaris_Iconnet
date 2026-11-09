@@ -34,6 +34,24 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('Error setting up event listeners:', e);
     }
 
+    // Determine initial page from URL hash or sessionStorage and navigate to it
+    const initialPage = getInitialPage();
+    navigateTo(initialPage, false);
+
+    // Listen for browser navigation (back/forward)
+    window.addEventListener('popstate', function (e) {
+        const page = (e.state && e.state.page) || getInitialPage();
+        navigateTo(page, false);
+    });
+
+    // Listen for hashchange
+    window.addEventListener('hashchange', function () {
+        const pageFromHash = window.location.hash.replace(/^#\/?/, '').trim();
+        if (pageFromHash) {
+            navigateTo(pageFromHash, false);
+        }
+    });
+
     // Load data
     loadCategories();
     loadCubiclePositions().finally(() => {
@@ -411,6 +429,7 @@ function setupEventListeners() {
 function logout() {
     sessionStorage.removeItem('isLoggedIn');
     sessionStorage.removeItem('user');
+    sessionStorage.removeItem('activePage');
     window.location.href = 'login.html';
 }
 
@@ -669,29 +688,68 @@ function highlightDashboardMap() {
 // Expose to global
 window.highlightDashboardMap = highlightDashboardMap;
 
-async function navigateTo(page) {
-    // Update menu
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.getAttribute('data-page') === page) {
-            item.classList.add('active');
-        }
-    });
+function getInitialPage() {
+    const validPages = [
+        'dashboard', 'inventory', 'input', 'scan',
+        'history', 'handover-data', 'handover-input',
+        'map-designer', 'map-view'
+    ];
 
-    // Open submenu if navigating to a submenu item
-    const targetSubmenuItem = document.querySelector(`.submenu-item[data-page="${page}"]`);
-    if (targetSubmenuItem) {
-        const parentHasSubmenu = targetSubmenuItem.previousElementSibling;
-        if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
-            parentHasSubmenu.classList.add('open');
-            const submenuContainer = parentHasSubmenu.nextElementSibling;
-            if (submenuContainer && submenuContainer.classList.contains('submenu')) {
-                submenuContainer.classList.add('open');
-            }
-        }
+    let page = '';
+    // 1. Check URL hash first (e.g. #inventory)
+    if (window.location.hash) {
+        page = window.location.hash.replace(/^#\/?/, '').trim();
+    }
+    // 2. Check sessionStorage if no hash
+    if (!page) {
+        try {
+            page = sessionStorage.getItem('activePage') || '';
+        } catch (e) {}
     }
 
-    // Update page with animation
+    // Normalization aliases
+    if (page === 'handover') page = 'handover-data';
+    if (page === 'map') page = 'map-view';
+
+    if (validPages.includes(page)) {
+        return page;
+    }
+    return 'dashboard';
+}
+
+async function navigateTo(page, updateHistory = true) {
+    if (!page) page = 'dashboard';
+    // Alias mappings
+    if (page === 'handover') page = 'handover-data';
+    if (page === 'map') page = 'map-view';
+
+    // 1. Update menu highlight
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+
+    const targetSubmenuItem = document.querySelector(`.submenu-item[data-page="${page}"]`);
+    if (targetSubmenuItem) {
+        targetSubmenuItem.classList.add('active');
+        const submenu = targetSubmenuItem.closest('.submenu');
+        if (submenu) {
+            submenu.classList.add('open');
+            const parentHasSubmenu = submenu.previousElementSibling;
+            if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+                parentHasSubmenu.classList.add('open');
+            }
+        }
+    } else {
+        const topItem = document.querySelector(`.menu-item:not(.submenu-item)[data-page="${page}"]`);
+        if (topItem) {
+            topItem.classList.add('active');
+        }
+        // If navigating to top-level page, close all submenus for clean UI
+        document.querySelectorAll('.menu-item.has-submenu').forEach(h => h.classList.remove('open'));
+        document.querySelectorAll('.submenu').forEach(s => s.classList.remove('open'));
+    }
+
+    // 2. Update page with animation
     console.log('[NAV] Navigating to:', page);
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
 
@@ -718,7 +776,7 @@ async function navigateTo(page) {
         console.error('[NAV] CRITICAL: Page not found!', pageId);
     }
 
-    // Update title
+    // 3. Update title
     const pageTitles = {
         'dashboard': 'Dashboard',
         'inventory': 'Inventory',
@@ -731,13 +789,34 @@ async function navigateTo(page) {
         'map-designer': 'Mapping Lokasi',
         'map-view': 'Visualisasi Denah'
     };
-    document.getElementById('pageTitle').textContent = pageTitles[page] || 'Inventory System';
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) {
+        titleEl.textContent = pageTitles[page] || 'Inventory System';
+    }
 
-    // Update content
+    // 4. Persist active page state in URL hash and sessionStorage
+    if (updateHistory) {
+        try {
+            const currentHash = window.location.hash.replace(/^#\/?/, '').trim();
+            if (currentHash !== page) {
+                history.pushState({ page }, '', '#' + page);
+            }
+        } catch (e) {
+            window.location.hash = page;
+        }
+    }
+    try {
+        sessionStorage.setItem('activePage', page);
+    } catch (e) {
+        console.warn('sessionStorage not available:', e);
+    }
+
+    // 5. Update content
     if (page === 'dashboard') {
         // Small delay to ensure the DOM is ready for map rendering
         setTimeout(() => {
             updateDashboard();
+            if (typeof renderDashboardMap === 'function') renderDashboardMap();
         }, 100);
     } else if (page === 'inventory') {
         updateInventoryTable();
@@ -755,11 +834,11 @@ async function navigateTo(page) {
         if (!inventoryData || inventoryData.length === 0) {
             loadInventory().then(() => {
                 const kat = document.getElementById('handoverKategori');
-                if (kat && kat.value) loadItemsByCategory();
+                if (kat && kat.value && typeof loadItemsByCategory === 'function') loadItemsByCategory();
             });
         } else {
             const kat = document.getElementById('handoverKategori');
-            if (kat && kat.value) loadItemsByCategory();
+            if (kat && kat.value && typeof loadItemsByCategory === 'function') loadItemsByCategory();
         }
         // Reinit signature pad after brief delay to ensure canvas is visible
         setTimeout(() => {
