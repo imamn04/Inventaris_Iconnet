@@ -49,7 +49,9 @@
             justify-content: center;
             position: relative;
             padding: 24px;
-            background: radial-gradient(circle at 50% 0%, #172554 0%, #090d16 65%);
+            background: 
+                linear-gradient(135deg, rgba(10, 15, 30, 0.78) 0%, rgba(15, 23, 42, 0.86) 100%),
+                url('img/background.png') no-repeat center center / cover;
             overflow: hidden;
         }
 
@@ -424,17 +426,6 @@
                     <span id="alertMessage">Username atau password tidak sesuai!</span>
                 </div>
 
-                <!-- Demo Quick Fill Pill -->
-                <div class="demo-pill">
-                    <div>
-                        <i class="fas fa-key" style="margin-right: 6px; color: #38bdf8;"></i>
-                        <span>Akun Demo: <strong>admin</strong> / <strong>admin123</strong></span>
-                    </div>
-                    <button type="button" class="btn-fill-demo" id="btnQuickDemo">
-                        <i class="fas fa-wand-magic-sparkles"></i> Auto Fill
-                    </button>
-                </div>
-
                 <!-- Login Form -->
                 <form id="loginForm">
                     <div class="form-group">
@@ -487,13 +478,6 @@
             const isPassword = passwordInput.getAttribute('type') === 'password';
             passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
             toggleIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
-        });
-
-        // Quick Fill Demo
-        document.getElementById('btnQuickDemo').addEventListener('click', () => {
-            document.getElementById('username').value = 'admin';
-            document.getElementById('password').value = 'admin123';
-            document.getElementById('loginAlert').classList.remove('show');
         });
 
         // Login Handler
