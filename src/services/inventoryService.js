@@ -153,9 +153,22 @@ async function updateInventoryItem(id, data) {
   if (data.cubicle_id !== undefined || data.cubicleId !== undefined) {
     cubicleIdVal = (data.cubicle_id || data.cubicleId || '').trim().toUpperCase();
   } else if (data.lokasi !== undefined) {
-    const extracted = extractCubicleId(data.lokasi);
-    if (extracted) {
-      cubicleIdVal = extracted;
+    cubicleIdVal = extractCubicleId(data.lokasi);
+  }
+
+  let qrCode = data.qrCode !== undefined ? data.qrCode : current.qrCode;
+  if (qrCode && qrCode.startsWith('data:image/png;base64,')) {
+    try {
+      const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
+      const barcodeDir = path.join(process.cwd(), 'barcode');
+      if (!fs.existsSync(barcodeDir)) {
+        fs.mkdirSync(barcodeDir, { recursive: true });
+      }
+      const barcodePath = path.join(barcodeDir, `${id}.png`);
+      fs.writeFileSync(barcodePath, base64Data, 'base64');
+      qrCode = `/barcode/${id}.png`;
+    } catch (e) {
+      console.warn(`[Inventory] Could not save QR image to disk for ${id}:`, e.message);
     }
   }
 
@@ -173,7 +186,7 @@ async function updateInventoryItem(id, data) {
       catatan: data.catatan !== undefined ? data.catatan : current.catatan,
       tanggalMasuk: tanggalMasuk,
       date: dateVal,
-      qrCode: data.qrCode !== undefined ? data.qrCode : current.qrCode,
+      qrCode: qrCode,
       cubicleId: cubicleIdVal
     }
   });
@@ -382,11 +395,21 @@ async function assignCubicle(itemId, cubicleId) {
   if (!item) return null;
 
   const targetCubicle = cubicleId ? cubicleId.trim().toUpperCase() : '';
+  let newLokasi = targetCubicle;
+  if (!targetCubicle) {
+    const oldExtracted = extractCubicleId(item.lokasi || '');
+    if (oldExtracted && oldExtracted === (item.cubicleId || '').toUpperCase()) {
+      newLokasi = '-';
+    } else {
+      newLokasi = item.lokasi || '-';
+    }
+  }
+
   const updated = await prisma.inventory.update({
     where: { id: itemId },
     data: {
       cubicleId: targetCubicle,
-      lokasi: targetCubicle || item.lokasi || '-'
+      lokasi: newLokasi
     }
   });
 

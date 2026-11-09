@@ -6,38 +6,38 @@ const loginSchema = z.object({
 });
 
 const inventoryItemSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().optional().nullable(),
   name: z.string().min(1, 'Nama item wajib diisi').trim(),
-  merk: z.string().optional().default(''),
-  sn: z.string().optional().default(''),
-  snConverter: z.string().optional().default(''),
-  lokasi: z.string().optional().default(''),
-  kondisiBefore: z.string().optional().default('Baik'),
-  checklist: z.string().optional().default('Tidak'),
-  kondisiAfter: z.string().optional().default(''),
-  catatan: z.string().optional().default(''),
+  merk: z.string().optional().nullable().default(''),
+  sn: z.string().optional().nullable().default(''),
+  snConverter: z.string().optional().nullable().default(''),
+  lokasi: z.string().optional().nullable().default(''),
+  kondisiBefore: z.string().optional().nullable().default('Baik'),
+  checklist: z.string().optional().nullable().default('Tidak'),
+  kondisiAfter: z.string().optional().nullable().default(''),
+  catatan: z.string().optional().nullable().default(''),
   tanggalMasuk: z.string().optional().nullable(),
   date: z.string().optional().nullable(),
-  qrCode: z.string().optional().default(''),
-  cubicle_id: z.string().optional().default(''),
+  qrCode: z.string().optional().nullable().default(''),
+  cubicle_id: z.string().optional().nullable().default(''),
   checkTime: z.string().optional().nullable()
 });
 
 const inventoryUpdateSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1, 'Nama item wajib diisi').trim().optional(),
-  merk: z.string().optional(),
-  sn: z.string().optional(),
-  snConverter: z.string().optional(),
-  lokasi: z.string().optional(),
-  kondisiBefore: z.string().optional(),
-  checklist: z.string().optional(),
-  kondisiAfter: z.string().optional(),
-  catatan: z.string().optional(),
+  id: z.string().optional().nullable(),
+  name: z.string().min(1, 'Nama item wajib diisi').trim().optional().nullable(),
+  merk: z.string().optional().nullable(),
+  sn: z.string().optional().nullable(),
+  snConverter: z.string().optional().nullable(),
+  lokasi: z.string().optional().nullable(),
+  kondisiBefore: z.string().optional().nullable(),
+  checklist: z.string().optional().nullable(),
+  kondisiAfter: z.string().optional().nullable(),
+  catatan: z.string().optional().nullable(),
   tanggalMasuk: z.string().optional().nullable(),
   date: z.string().optional().nullable(),
-  qrCode: z.string().optional(),
-  cubicle_id: z.string().optional(),
+  qrCode: z.string().optional().nullable(),
+  cubicle_id: z.string().optional().nullable(),
   checkTime: z.string().optional().nullable()
 });
 
@@ -71,21 +71,21 @@ const cubiclePositionsBulkSchema = z.object({
 });
 
 const handoverSchema = z.object({
-  jenis: z.string().optional().default('Serah Terima'),
+  jenis: z.string().optional().nullable().default('Serah Terima'),
   itemId: z.string().min(1, 'Item ID wajib diisi'),
-  itemName: z.string().optional().default(''),
-  itemMerk: z.string().optional().default(''),
-  itemSn: z.string().optional().default(''),
-  itemSnConverter: z.string().optional().default(''),
-  pihakPenyerah: z.string().optional().default(''),
-  pihakPenerima: z.string().optional().default(''),
+  itemName: z.string().optional().nullable().default(''),
+  itemMerk: z.string().optional().nullable().default(''),
+  itemSn: z.string().optional().nullable().default(''),
+  itemSnConverter: z.string().optional().nullable().default(''),
+  pihakPenyerah: z.string().optional().nullable().default(''),
+  pihakPenerima: z.string().optional().nullable().default(''),
   tanggalSerahTerima: z.string().optional().nullable(),
-  kondisiBefore: z.string().optional().default(''),
-  kondisiAfter: z.string().optional().default(''),
-  lokasiBaru: z.string().optional().default(''),
-  catatan: z.string().optional().default(''),
-  noBeritaAcara: z.string().optional().default(''),
-  signature: z.string().optional().default('')
+  kondisiBefore: z.string().optional().nullable().default(''),
+  kondisiAfter: z.string().optional().nullable().default(''),
+  lokasiBaru: z.string().optional().nullable().default(''),
+  catatan: z.string().optional().nullable().default(''),
+  noBeritaAcara: z.string().optional().nullable().default(''),
+  signature: z.string().optional().nullable().default('')
 });
 
 module.exports = {

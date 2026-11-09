@@ -958,7 +958,7 @@ function toggleSelectAll() {
         const filterValue = filterSelect ? filterSelect.value : 'all';
 
         const filtered = inventoryData.filter(item => {
-            if (filterValue !== 'all' && item.name !== filterValue) {
+            if (filterValue !== 'all' && (!item.name || item.name.toLowerCase() !== filterValue.toLowerCase())) {
                 return false;
             }
             const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
@@ -1100,7 +1100,7 @@ function changePage(direction) {
     const filterValue = filterSelect ? filterSelect.value : 'all';
 
     let filtered = inventoryData.filter(item => {
-        if (filterValue !== 'all' && item.name !== filterValue) return false;
+        if (filterValue !== 'all' && (!item.name || item.name.toLowerCase() !== filterValue.toLowerCase())) return false;
         const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
             (item.merk && item.merk.toLowerCase().includes(search)) ||
             (item.sn && item.sn.toLowerCase().includes(search)) ||
@@ -1135,7 +1135,7 @@ function updateInventoryTable() {
     if (selectAllCheckbox) selectAllCheckbox.checked = false;
 
     let filtered = inventoryData.filter(item => {
-        if (filterValue !== 'all' && item.name !== filterValue) return false;
+        if (filterValue !== 'all' && (!item.name || item.name.toLowerCase() !== filterValue.toLowerCase())) return false;
         const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
             (item.merk && item.merk.toLowerCase().includes(search)) ||
             (item.sn && item.sn.toLowerCase().includes(search)) ||
@@ -6148,7 +6148,7 @@ async function handleCubicleClick(cubicleId) {
                     </div>
                 </div>
                 <div class="item-actions" style="margin-left: 10px; display: flex; gap: 8px;">
-                    <button class="action-btn-mini" onclick="closeModal('cubicleDetailModal'); openPassportModal('${item.id}')" title="Buka Passport & Detail Aset" style="width: 36px; height: 36px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+                    <button class="action-btn-mini" onclick="closeModal('cubicleDetailModal'); viewItem('${item.id}')" title="Buka Detail Aset" style="width: 36px; height: 36px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
                         <i class="fas fa-eye"></i>
                     </button>
                     <button class="unassign-btn" onclick="assignItemToCubicle('${item.id}', '')" title="Keluarkan dari kubikel" style="width: 36px; height: 36px; border-radius: 10px;">
