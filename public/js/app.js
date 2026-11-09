@@ -4385,6 +4385,7 @@ async function submitHandover(e) {
             }
             if (signaturePad) signaturePad.clear();
             loadHandover();
+            loadInventory();
         } else {
             showToast('Gagal menyimpan serah terima!', true);
         }

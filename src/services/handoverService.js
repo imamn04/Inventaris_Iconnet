@@ -1,5 +1,16 @@
 const prisma = require('../config/prisma');
 
+function extractCubicleId(lokasiStr) {
+  if (!lokasiStr || typeof lokasiStr !== 'string') return '';
+  const match = lokasiStr.trim().match(/\b([A-Fa-f])-?0*([1-9]|[1-3][0-9])\b/);
+  if (match) {
+    const block = match[1].toUpperCase();
+    const num = String(parseInt(match[2], 10)).padStart(2, '0');
+    return `${block}-${num}`;
+  }
+  return '';
+}
+
 async function getAllHandover() {
   const records = await prisma.handover.findMany({
     orderBy: { timestamp: 'desc' }
@@ -52,6 +63,26 @@ async function createHandover(data) {
       signature: data.signature || ''
     }
   });
+
+  // Sync inventory item's location and cubicleId if lokasiBaru is provided
+  if (data.itemId && data.lokasiBaru && String(data.lokasiBaru).trim()) {
+    try {
+      const newLokasi = String(data.lokasiBaru).trim();
+      const extractedCubicle = extractCubicleId(newLokasi);
+      const updatePayload = { lokasi: newLokasi };
+      if (extractedCubicle) {
+        updatePayload.cubicleId = extractedCubicle;
+      } else if (newLokasi === '-') {
+        updatePayload.cubicleId = '';
+      }
+      await prisma.inventory.update({
+        where: { id: data.itemId },
+        data: updatePayload
+      });
+    } catch (errSync) {
+      console.warn('[Handover Sync] Gagal memperbarui lokasi item:', errSync.message);
+    }
+  }
 
   return created;
 }

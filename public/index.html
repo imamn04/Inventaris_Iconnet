@@ -1158,7 +1158,12 @@
                                         </div>
                                         <div class="compact-field">
                                             <label><i class="fas fa-map-marker-alt"></i> Lokasi Baru (Opsional)</label>
-                                            <input type="text" id="handoverLokasi" placeholder="Misal: Cubicle A-12 / Server Room">
+                                            <div style="display: flex; gap: 8px; align-items: center;">
+                                                <input type="text" id="handoverLokasi" list="cubicleSuggestions" placeholder="Pilih/Ketik Kubikel (contoh: A-01) atau Ruangan" autocomplete="off" style="flex: 1;">
+                                                <button type="button" class="btn-cubicle-picker-trigger" onclick="openCubiclePicker('handoverLokasi')" title="Pilih dari daftar kubikel">
+                                                    <i class="fas fa-th-large"></i> <span>Pilih</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
