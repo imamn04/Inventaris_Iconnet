@@ -1559,27 +1559,41 @@
         </div>
     </div>
 
-    <!-- Add Category Modal -->
+    <!-- Manage Category Modal -->
     <div class="modal-overlay" id="addCategoryModal">
-        <div class="modal" style="max-width: 440px;">
+        <div class="modal" style="max-width: 480px; max-height: 85vh; display: flex; flex-direction: column;">
             <div class="modal-header">
-                <h3><i class="fas fa-folder-plus" style="color: var(--primary); margin-right: 8px;"></i> Tambah Kategori Baru</h3>
+                <h3><i class="fas fa-tags" style="color: var(--primary); margin-right: 8px;"></i> Kelola Kategori Inventaris</h3>
                 <button class="modal-close" onclick="closeModal('addCategoryModal')">&times;</button>
             </div>
-            <div class="modal-body">
-                <form id="addCategoryForm" onsubmit="event.preventDefault(); submitNewCategory();">
-                    <div class="form-group" style="margin-bottom: 16px;">
-                        <label>Nama Kategori <span class="required">*</span></label>
-                        <input type="text" id="newCategoryInput" placeholder="Contoh: Printer, Switch, Server, Router..." required autocomplete="off">
-                        <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 6px; display: block;">
-                            <i class="fas fa-info-circle"></i> Kategori akan disimpan ke database & langsung tersedia di semua filter dan formulir.
-                        </small>
-                    </div>
-                    <div class="form-actions" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                        <button type="button" class="modal-btn cancel" onclick="closeModal('addCategoryModal')">Batal</button>
-                        <button type="submit" class="modal-btn save"><i class="fas fa-save"></i> Simpan Kategori</button>
+            <div class="modal-body" style="overflow-y: auto; padding: 18px;">
+                <!-- Form Tambah Baru -->
+                <form id="addCategoryForm" onsubmit="event.preventDefault(); submitNewCategory();" style="margin-bottom: 20px;">
+                    <label style="font-weight: 600; font-size: 13px; margin-bottom: 6px; display: block; color: var(--text-primary);">
+                        <i class="fas fa-plus-circle" style="color: var(--primary);"></i> Tambah Kategori Baru
+                    </label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="newCategoryInput" placeholder="Contoh: Printer, Switch, Server..." required autocomplete="off" style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 13px;">
+                        <button type="submit" class="modal-btn save" style="padding: 10px 16px; white-space: nowrap;">
+                            <i class="fas fa-save"></i> Simpan
+                        </button>
                     </div>
                 </form>
+
+                <div style="border-top: 1px solid var(--border-light); padding-top: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">
+                            Daftar Kategori Tersimpan (<span id="categoryCountBadge">0</span>)
+                        </span>
+                        <small style="font-size: 11px; color: var(--text-tertiary);">Klik ikon tong sampah untuk hapus</small>
+                    </div>
+                    <div id="categoryManageList" class="category-manage-list">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 18px; border-top: 1px solid var(--border-light);">
+                <button type="button" class="modal-btn cancel" onclick="closeModal('addCategoryModal')">Tutup</button>
             </div>
         </div>
     </div>
@@ -1703,8 +1717,8 @@
     </div>
 
     <!-- Modal Quick Cubicle Picker (Touch-Friendly for Mobile & Desktop) -->
-    <div id="cubiclePickerModal" class="modal">
-        <div class="modal-content" style="max-width: 520px; max-height: 85vh; display: flex; flex-direction: column;">
+    <div class="modal-overlay" id="cubiclePickerModal">
+        <div class="modal" style="max-width: 520px; max-height: 85vh; display: flex; flex-direction: column;">
             <div class="modal-header">
                 <h3><i class="fas fa-th-large" style="color: var(--primary); margin-right: 8px;"></i> Pilih Kubikel Penempatan</h3>
                 <button class="modal-close" onclick="closeModal('cubiclePickerModal')">&times;</button>

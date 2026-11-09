@@ -6609,3 +6609,82 @@ td .btn-excel:hover {
     color: var(--primary);
     border-color: var(--primary);
 }
+
+/* ======================================================
+   CATEGORY MANAGEMENT MODAL STYLES
+   ====================================================== */
+.category-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.category-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    transition: all 0.2s ease;
+}
+
+.category-manage-item:hover {
+    border-color: var(--primary);
+    background: var(--bg-secondary);
+}
+
+.category-item-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.category-item-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.category-item-count {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
+}
+
+.category-delete-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.category-delete-btn:hover {
+    background: #ef4444;
+    color: #ffffff;
+    transform: scale(1.08);
+}
+
+.category-delete-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
+}

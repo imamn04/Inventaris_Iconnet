@@ -1289,19 +1289,23 @@ function updateInventoryTable() {
 // CATEGORIES MANAGEMENT (DATABASE SYNC)
 // ========================================
 let categoriesData = [];
+let fullCategoriesData = [];
 
 async function loadCategories() {
     try {
         const res = await fetch('/api/categories');
         const data = await res.json();
         if (data.success && Array.isArray(data.categories)) {
+            fullCategoriesData = data.categories;
             categoriesData = data.categories.map(c => c.name);
         } else {
             categoriesData = ['Monitor', 'Laptop', 'Keyboard', 'Mouse', 'Headset', 'PC', 'TV'];
+            fullCategoriesData = categoriesData.map((name, idx) => ({ id: idx + 1, name }));
         }
     } catch (err) {
         console.error('Failed to load categories:', err);
         categoriesData = ['Monitor', 'Laptop', 'Keyboard', 'Mouse', 'Headset', 'PC', 'TV'];
+        fullCategoriesData = categoriesData.map((name, idx) => ({ id: idx + 1, name }));
     }
     renderCategoryOptions();
 }
@@ -1317,7 +1321,7 @@ function renderCategoryOptions() {
         itemNameSelect.innerHTML = `
             <option value="">Pilih Kategori</option>
             ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
-            <option value="__custom__" style="color: var(--primary); font-weight: 600;">+ Tambah Kategori Baru...</option>
+            <option value="__custom__" style="color: var(--primary); font-weight: 600;">+ Tambah / Kelola Kategori...</option>
         `;
         if (currentVal && categoriesData.includes(currentVal)) {
             itemNameSelect.value = currentVal;
@@ -1378,8 +1382,72 @@ function renderCategoryOptions() {
 function openAddCategoryModal() {
     const input = document.getElementById('newCategoryInput');
     if (input) input.value = '';
+    renderManageCategoryList();
     openModal('addCategoryModal');
     setTimeout(() => { if (input) input.focus(); }, 150);
+}
+
+function renderManageCategoryList() {
+    const listEl = document.getElementById('categoryManageList');
+    const badgeEl = document.getElementById('categoryCountBadge');
+    if (!listEl) return;
+
+    if (badgeEl) badgeEl.textContent = fullCategoriesData.length;
+
+    if (!fullCategoriesData || fullCategoriesData.length === 0) {
+        listEl.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 12px; font-size: 13px;">Belum ada kategori tersimpan</div>';
+        return;
+    }
+
+    listEl.innerHTML = fullCategoriesData.map(cat => {
+        const catName = cat.name || cat;
+        const catId = cat.id;
+        const count = inventoryData.filter(i => (i.name || '').toLowerCase() === catName.toLowerCase()).length;
+        const isDeletable = Boolean(catId);
+
+        return `
+            <div class="category-manage-item">
+                <div class="category-item-info">
+                    <i class="fas fa-tag" style="color: var(--primary); font-size: 13px;"></i>
+                    <span class="category-item-name">${catName}</span>
+                    <span class="category-item-count">${count} barang</span>
+                </div>
+                ${isDeletable ? `
+                    <button type="button" class="category-delete-btn" onclick="deleteCategoryItem(${catId}, '${catName.replace(/'/g, "\\'")}', ${count})" title="${count > 0 ? 'Sedang dipakai oleh ' + count + ' barang' : 'Hapus kategori'}">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+async function deleteCategoryItem(id, name, count) {
+    if (count > 0) {
+        alert(`Kategori "${name}" saat ini masih digunakan oleh ${count} barang inventaris!\n\nSilakan ubah kategori barang terkait terlebih dahulu sebelum menghapus kategori ini agar data aset tetap rapi.`);
+        return;
+    }
+
+    if (!confirm(`Apakah Anda yakin ingin menghapus kategori "${name}" dari sistem?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/categories/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Kategori "${name}" berhasil dihapus!`);
+            await loadCategories();
+            renderManageCategoryList();
+        } else {
+            showToast(data.message || 'Gagal menghapus kategori!', true);
+        }
+    } catch (err) {
+        console.error('Error delete category:', err);
+        showToast('Gagal menghapus kategori!', true);
+    }
 }
 
 async function submitNewCategory() {
@@ -1400,8 +1468,9 @@ async function submitNewCategory() {
         const data = await res.json();
         if (data.success && data.category) {
             showToast(`Kategori "${data.category.name}" berhasil disimpan ke database!`);
-            closeModal('addCategoryModal');
+            input.value = '';
             await loadCategories();
+            renderManageCategoryList();
 
             // Auto select newly created category in form
             const itemNameSelect = document.getElementById('itemName');
@@ -1421,6 +1490,8 @@ async function submitNewCategory() {
 
 window.openAddCategoryModal = openAddCategoryModal;
 window.submitNewCategory = submitNewCategory;
+window.deleteCategoryItem = deleteCategoryItem;
+window.renderManageCategoryList = renderManageCategoryList;
 window.loadCategories = loadCategories;
 
 // ========================================
