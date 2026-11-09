@@ -1321,18 +1321,20 @@ async function handleInventorySubmit(e) {
             correctLevel: QRCode.CorrectLevel.H
         });
 
-        // Get QR code as data URL and update on server
+        // Get QR code as data URL, hide duplicate img element, and update on server
         setTimeout(() => {
             const canvas = qrcodeDiv.querySelector('canvas');
+            const img = qrcodeDiv.querySelector('img');
+            if (canvas && img) {
+                img.style.setProperty('display', 'none', 'important');
+            }
             if (canvas) {
                 savedItem.qrCode = canvas.toDataURL('image/png');
                 updateInventoryItem(savedItem.id, { qrCode: savedItem.qrCode });
-            } else {
-                const img = qrcodeDiv.querySelector('img');
-                if (img) {
-                    savedItem.qrCode = img.src;
-                    updateInventoryItem(savedItem.id, { qrCode: savedItem.qrCode });
-                }
+            } else if (img) {
+                img.style.setProperty('display', 'block', 'important');
+                savedItem.qrCode = img.src;
+                updateInventoryItem(savedItem.id, { qrCode: savedItem.qrCode });
             }
         }, 100);
 
