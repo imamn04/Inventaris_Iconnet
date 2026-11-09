@@ -26,11 +26,17 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('userName').textContent = user.name;
     }
 
-    // Initialize app - Load positions first to avoid race conditions
-    loadCubiclePositions().then(() => {
-        loadInventory();
+    // Setup event listeners immediately so sidebar menus and buttons are responsive
+    try {
         setupEventListeners();
-        initGlobalEventListeners(); // Set up delegation
+        initGlobalEventListeners();
+    } catch (e) {
+        console.error('Error setting up event listeners:', e);
+    }
+
+    // Load data
+    loadCubiclePositions().finally(() => {
+        loadInventory();
     });
 
     // Premium Upgrade: only init theme & charts at startup
@@ -331,7 +337,24 @@ function setupEventListeners() {
     document.getElementById('inventoryForm').addEventListener('submit', handleInventorySubmit);
 
     // Handover form
-    document.getElementById('handoverForm').addEventListener('submit', submitHandover);
+    const handoverFormEl = document.getElementById('handoverForm');
+    if (handoverFormEl) {
+        handoverFormEl.addEventListener('submit', submitHandover);
+    }
+
+    // Handover dynamic item selectors (reliable JS event listeners)
+    const handoverKatEl = document.getElementById('handoverKategori');
+    if (handoverKatEl) {
+        handoverKatEl.addEventListener('change', loadItemsByCategory);
+    }
+    const handoverItemEl = document.getElementById('handoverItem');
+    if (handoverItemEl) {
+        handoverItemEl.addEventListener('change', loadHandoverItemDetails);
+    }
+    const handoverJenisEl = document.getElementById('handoverJenis');
+    if (handoverJenisEl) {
+        handoverJenisEl.addEventListener('change', toggleHandoverFields);
+    }
 
     // Print QR button
     document.getElementById('printQrBtn').addEventListener('click', printQRCode);
@@ -709,6 +732,16 @@ async function navigateTo(page) {
         loadHandover();
     } else if (page === 'handover-input') {
         loadHandover();
+        // Pastikan data inventaris termuat untuk dropdown pemilihan unit
+        if (!inventoryData || inventoryData.length === 0) {
+            loadInventory().then(() => {
+                const kat = document.getElementById('handoverKategori');
+                if (kat && kat.value) loadItemsByCategory();
+            });
+        } else {
+            const kat = document.getElementById('handoverKategori');
+            if (kat && kat.value) loadItemsByCategory();
+        }
         // Reinit signature pad after brief delay to ensure canvas is visible
         setTimeout(() => {
             if (typeof initSignaturePad === 'function') initSignaturePad();
@@ -971,6 +1004,10 @@ function changePage(direction) {
         return matchesSearch;
     });
 
+    if (sortState['inventoryTable'] && sortState['inventoryTable'].key) {
+        filtered = sortData(filtered, sortState['inventoryTable'].key, sortState['inventoryTable'].dir);
+    }
+
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
     currentPage += direction;
 
@@ -1001,6 +1038,10 @@ function updateInventoryTable() {
             (item.lokasi && item.lokasi.toLowerCase().includes(search));
         return matchesSearch;
     });
+
+    if (sortState['inventoryTable'] && sortState['inventoryTable'].key) {
+        filtered = sortData(filtered, sortState['inventoryTable'].key, sortState['inventoryTable'].dir);
+    }
 
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -1049,31 +1090,52 @@ function updateInventoryTable() {
 
             return `
             <tr data-id="${item.id}" class="${isSelected ? 'selected-row' : ''}">
-                <td><input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''}></td>
-                <td><span class="category-badge ${categoryClass}">${item.name || '-'}</span></td>
-                <td>${item.merk || '-'}</td>
-                <td><span class="barcode-value">${item.sn || '-'}</span></td>
-                <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
-                <td>${item.lokasi || '-'}</td>
-                <td><span class="status-badge ${kondisiBeforeClass}">${item.kondisiBefore || '-'}</span></td>
-                <td><span class="status-badge ${kondisiAfterClass}">${item.kondisiAfter || '-'}</span></td>
-                <td><span class="status-badge ${checklistClass}">${item.checklist || '-'}</span></td>
-                <td>${item.catatan || '-'}</td>
-                <td>${item.tanggalMasuk || '-'}</td>
-                <td>${item.date || '-'}</td>
-                <td>
-                    ${item.qrCode
-                    ? `<img src="${item.qrCode}" alt="QR" class="qr-thumbnail">`
-                    : `<span class="no-data">-</span>`
-                }
+                <td style="text-align: center;">
+                    <input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''}>
                 </td>
-                <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
                 <td>
-                    <div class="action-buttons">
-                        <button class="action-btn view" title="Lihat"><i class="fas fa-eye"></i></button>
-                        <button class="action-btn edit" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn print" title="Cetak Label"><i class="fas fa-print"></i></button>
-                        <button class="action-btn delete" title="Hapus"><i class="fas fa-trash"></i></button>
+                    <div class="unit-cell">
+                        <span class="category-badge ${categoryClass}">${item.name || '-'}</span>
+                        <span class="unit-id-badge">#${item.id || '-'}</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="spec-cell">
+                        <span class="spec-merk">${item.merk || '-'}</span>
+                        <span class="spec-sn font-mono">SN: ${item.sn || '-'}</span>
+                        ${item.snConverter ? `<span class="spec-converter font-mono">Conv: ${item.snConverter}</span>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <span class="loc-tag">
+                        <i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}
+                    </span>
+                </td>
+                <td>
+                    <div class="condition-flow">
+                        <span class="status-badge ${kondisiBeforeClass}">${item.kondisiBefore || '-'}</span>
+                        <span class="cond-arrow">➔</span>
+                        <span class="status-badge ${kondisiAfterClass}">${item.kondisiAfter || '-'}</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="checklist-notes">
+                        <span class="status-badge ${checklistClass}">${item.checklist === 'Ya' ? '✓ Ya' : '✕ Tidak'}</span>
+                        ${item.catatan ? `<span class="notes-preview" title="${item.catatan}"><i class="fas fa-comment-dots"></i> ${item.catatan}</span>` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="date-qr-cell">
+                        <span class="doc-date"><i class="far fa-calendar-alt"></i> ${item.date || item.tanggalMasuk || '-'}</span>
+                        ${item.qrCode ? `<img src="${item.qrCode}" alt="QR" class="qr-thumbnail" title="Klik untuk lihat">` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="table-actions-cluster action-buttons">
+                        <button class="action-btn view btn-action-icon btn-view" title="Lihat"><i class="fas fa-eye"></i></button>
+                        <button class="action-btn edit btn-action-icon btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="action-btn print btn-action-icon btn-print" title="Cetak Label"><i class="fas fa-print"></i></button>
+                        <button class="action-btn delete btn-action-icon btn-del" title="Hapus"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
@@ -1113,6 +1175,65 @@ function updateInventoryTable() {
 // ========================================
 // INPUT INVENTORY
 // ========================================
+function handleNewItemCategoryChange() {
+    const itemSelect = document.getElementById('itemName');
+    const snConverterRow = document.getElementById('snConverterRow');
+    if (!itemSelect) return;
+
+    if (itemSelect.value === 'Headset') {
+        if (snConverterRow) snConverterRow.style.display = 'flex';
+    } else {
+        if (snConverterRow) snConverterRow.style.display = 'none';
+        const snConv = document.getElementById('itemSnConverter');
+        if (snConv) snConv.value = '';
+    }
+    updateLiveAssetPreview();
+}
+
+function updateLiveAssetPreview() {
+    const name = document.getElementById('itemName') ? document.getElementById('itemName').value : '';
+    const merk = document.getElementById('itemMerk') ? document.getElementById('itemMerk').value : '';
+    const sn = document.getElementById('itemSn') ? document.getElementById('itemSn').value : '';
+    const kondisiAfter = document.getElementById('itemKondisiAfter') ? document.getElementById('itemKondisiAfter').value : 'Baik';
+
+    const liveItemTitle = document.getElementById('liveItemTitle');
+    const liveMerk = document.getElementById('liveMerk');
+    const liveSn = document.getElementById('liveSn');
+    const liveAvatarIcon = document.getElementById('liveAvatarIcon');
+    const liveStatusText = document.getElementById('liveStatusText');
+    const liveStatusPill = document.getElementById('liveStatusPill');
+
+    if (liveItemTitle) {
+        liveItemTitle.textContent = name ? `${name} ${merk}`.trim() : 'Pilih Nama Barang...';
+    }
+    if (liveMerk) liveMerk.textContent = merk || '-';
+    if (liveSn) liveSn.textContent = sn || '-';
+
+    if (liveStatusText) liveStatusText.textContent = kondisiAfter;
+    if (liveStatusPill) {
+        liveStatusPill.className = 'asset-status-pill';
+        if (kondisiAfter === 'Rusak Ringan') liveStatusPill.classList.add('status-rusak-ringan');
+        else if (kondisiAfter === 'Rusak Berat') liveStatusPill.classList.add('status-rusak-berat');
+    }
+
+    if (liveAvatarIcon) {
+        const cat = name.toLowerCase();
+        let icon = 'fa-box';
+        let bg = 'linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%)';
+        if (cat.includes('laptop')) { icon = 'fa-laptop'; bg = 'linear-gradient(135deg, #3b82f6, #1d4ed8)'; }
+        else if (cat.includes('pc')) { icon = 'fa-desktop'; bg = 'linear-gradient(135deg, #06b6d4, #0891b2)'; }
+        else if (cat.includes('monitor')) { icon = 'fa-tv'; bg = 'linear-gradient(135deg, #10b981, #047857)'; }
+        else if (cat.includes('headset')) { icon = 'fa-headphones'; bg = 'linear-gradient(135deg, #a855f7, #7e22ce)'; }
+        else if (cat.includes('keyboard')) { icon = 'fa-keyboard'; bg = 'linear-gradient(135deg, #6366f1, #4338ca)'; }
+        else if (cat.includes('mouse')) { icon = 'fa-mouse'; bg = 'linear-gradient(135deg, #f97316, #c2410c)'; }
+        else if (cat.includes('tv')) { icon = 'fa-tv'; bg = 'linear-gradient(135deg, #eab308, #a16207)'; }
+        liveAvatarIcon.style.background = bg;
+        liveAvatarIcon.innerHTML = `<i class="fas ${icon}"></i>`;
+    }
+}
+window.handleNewItemCategoryChange = handleNewItemCategoryChange;
+window.updateLiveAssetPreview = updateLiveAssetPreview;
+
 async function handleInventorySubmit(e) {
     e.preventDefault();
 
@@ -1149,6 +1270,8 @@ async function handleInventorySubmit(e) {
         const qrPlaceholder = document.getElementById('qrPlaceholder');
         qrcodeDiv.innerHTML = '';
         qrcodeDiv.style.display = 'block';
+        qrcodeDiv.style.margin = '12px auto';
+        qrcodeDiv.style.width = 'fit-content';
         qrPlaceholder.style.display = 'none';
 
         // Generate new QR code with correct ID
@@ -2295,6 +2418,19 @@ function renderScanTable() {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
 
+    if (sortState['scanTable'] && sortState['scanTable'].key) {
+        filteredData = filteredData.map(item => {
+            const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
+            const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
+            return {
+                ...item,
+                status: isChecked ? 1 : 0,
+                checkTime: checkTime || ''
+            };
+        });
+        filteredData = sortData(filteredData, sortState['scanTable'].key, sortState['scanTable'].dir);
+    }
+
     const totalItems = filteredData.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / scanItemsPerPage));
 
@@ -2373,6 +2509,19 @@ function updateScanStats() {
         filteredData = inventoryData.filter(item => item.name === filterValue);
     }
 
+    if (sortState['scanTable'] && sortState['scanTable'].key) {
+        filteredData = filteredData.map(item => {
+            const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
+            const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
+            return {
+                ...item,
+                status: isChecked ? 1 : 0,
+                checkTime: checkTime || ''
+            };
+        });
+        filteredData = sortData(filteredData, sortState['scanTable'].key, sortState['scanTable'].dir);
+    }
+
     const total = filteredData.length;
     let checked = 0;
 
@@ -2436,6 +2585,19 @@ async function exportChecklistToExcel() {
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name === filterValue);
+    }
+
+    if (sortState['scanTable'] && sortState['scanTable'].key) {
+        filteredData = filteredData.map(item => {
+            const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
+            const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
+            return {
+                ...item,
+                status: isChecked ? 1 : 0,
+                checkTime: checkTime || ''
+            };
+        });
+        filteredData = sortData(filteredData, sortState['scanTable'].key, sortState['scanTable'].dir);
     }
 
     if (filteredData.length === 0) {
@@ -2674,6 +2836,10 @@ function changeHistoryPage(direction) {
         return true;
     });
 
+    if (sortState['historyTable'] && sortState['historyTable'].key) {
+        filtered = sortData(filtered, sortState['historyTable'].key, sortState['historyTable'].dir);
+    }
+
     const totalPages = Math.ceil(filtered.length / historyItemsPerPage);
     historyPage += direction;
 
@@ -2717,6 +2883,10 @@ function renderHistoryTable() {
         }
         return true;
     });
+
+    if (sortState['historyTable'] && sortState['historyTable'].key) {
+        filtered = sortData(filtered, sortState['historyTable'].key, sortState['historyTable'].dir);
+    }
 
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / historyItemsPerPage));
@@ -3067,10 +3237,14 @@ function initSortableColumns() {
 
 function sortData(data, key, dir) {
     return [...data].sort((a, b) => {
-        let valA = a[key] || '';
-        let valB = b[key] || '';
-        if (typeof valA === 'string') valA = valA.toLowerCase();
-        if (typeof valB === 'string') valB = valB.toLowerCase();
+        let valA = a ? (a[key] ?? '') : '';
+        let valB = b ? (b[key] ?? '') : '';
+        if (key === 'date') {
+            valA = (a.date || a.tanggalMasuk || '');
+            valB = (b.date || b.tanggalMasuk || '');
+        }
+        if (typeof valA === 'string') valA = valA.trim().toLowerCase();
+        if (typeof valB === 'string') valB = valB.trim().toLowerCase();
         if (valA < valB) return dir === 'asc' ? -1 : 1;
         if (valA > valB) return dir === 'asc' ? 1 : -1;
         return 0;
@@ -3078,178 +3252,15 @@ function sortData(data, key, dir) {
 }
 
 function sortAndRenderInventory() {
-    const state = sortState['inventoryTable'];
-    if (!state) return;
-
-    const search = document.getElementById('searchInput').value.toLowerCase();
-    const filterValue = document.getElementById('exportFilter') ? document.getElementById('exportFilter').value : 'all';
-
-    let filtered = inventoryData.filter(item => {
-        if (filterValue !== 'all' && item.name !== filterValue) return false;
-        const matchesSearch = (item.name && item.name.toLowerCase().includes(search)) ||
-            (item.merk && item.merk.toLowerCase().includes(search)) ||
-            (item.sn && item.sn.toLowerCase().includes(search)) ||
-            (item.lokasi && item.lokasi.toLowerCase().includes(search));
-        return matchesSearch;
-    });
-
-    filtered = sortData(filtered, state.key, state.dir);
-
-    const tableBody = document.getElementById('inventoryTableBody');
-    const emptyState = document.getElementById('emptyState');
-
-    if (filtered.length === 0) {
-        tableBody.innerHTML = '';
-        emptyState.style.display = 'block';
-    } else {
-        emptyState.style.display = 'none';
-
-        // Use same rendering as updateInventoryTable
-        tableBody.innerHTML = filtered.map(item => {
-            const isSelected = selectedItems.has(item.id);
-            const kondisiBeforeClass = getStatusBadgeClass(item.kondisiBefore);
-            const kondisiAfterClass = getStatusBadgeClass(item.kondisiAfter);
-            const checklistClass = item.checklist === 'Ya' ? 'checked' : 'unchecked';
-            const categoryClass = getCategoryBadgeClass(item.name);
-
-            return `
-            <tr data-id="${item.id}">
-                <td><input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''}></td>
-                <td><span class="category-badge ${categoryClass}">${item.name || '-'}</span></td>
-                <td>${item.merk || '-'}</td>
-                <td><span class="barcode-value">${item.sn || '-'}</span></td>
-                <td><span class="barcode-value">${item.snConverter || '-'}</span></td>
-                <td>${item.lokasi || '-'}</td>
-                <td><span class="status-badge ${kondisiBeforeClass}">${item.kondisiBefore || '-'}</span></td>
-                <td><span class="status-badge ${kondisiAfterClass}">${item.kondisiAfter || '-'}</span></td>
-                <td><span class="status-badge ${checklistClass}">${item.checklist || '-'}</span></td>
-                <td>${item.catatan || '-'}</td>
-                <td>${item.tanggalMasuk || '-'}</td>
-                <td>${item.date || '-'}</td>
-                <td>
-                    ${item.qrCode
-                    ? `<img src="${item.qrCode}" alt="QR" class="qr-thumbnail">`
-                    : `<span class="no-data">-</span>`
-                }
-                </td>
-                <td><span class="barcode-value">${item.barcode || item.id || '-'}</span></td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="action-btn view" title="Lihat"><i class="fas fa-eye"></i></button>
-                        <button class="action-btn edit" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn delete" title="Hapus"><i class="fas fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>
-            `;
-        }).join('');
-
-        // Re-attach checkbox listeners after sorting
-        attachCheckboxListeners();
-
-        // Attach action button listeners
-        attachActionButtonListeners('historyTableBody');
-    }
+    updateInventoryTable();
 }
 
 function sortAndRenderScan() {
-    const state = sortState['scanTable'];
-    if (!state) return;
-
-    const filterSelect = document.getElementById('scanFilter');
-    const filterValue = filterSelect ? filterSelect.value : 'all';
-
-    let filteredData = inventoryData;
-    if (filterValue !== 'all') {
-        filteredData = inventoryData.filter(item => item.name === filterValue);
-    }
-
-    // Add sort-friendly properties (status: 1 = checked/sudah, 0 = unchecked/belum)
-    let sortableData = filteredData.map(item => {
-        const isChecked = checkedItems[item.id] && checkedItems[item.id].checked;
-        const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
-        return {
-            ...item,
-            status: isChecked ? 1 : 0,  // 1 = sudah dicek, 0 = belum dicek (untuk sorting)
-            statusText: isChecked ? 'Sudah Dicek' : 'Belum Dicek',  // Text untuk display
-            checkTime: checkTime || ''
-        };
-    });
-
-    sortableData = sortData(sortableData, state.key, state.dir);
-
-    const tableBody = document.getElementById('scanTableBody');
-    if (!tableBody) return;
-
-    tableBody.innerHTML = sortableData.map(item => {
-        const isChecked = item.status === 1;
-        const rowClass = isChecked ? 'scan-item-checked' : '';
-        const statusBadge = isChecked
-            ? '<span class="status-badge checked">Sudah Dicek</span>'
-            : '<span class="status-badge unchecked">Belum Dicek</span>';
-
-        return `
-            <tr class="${rowClass}" data-id="${item.id}">
-                <td>${statusBadge}</td>
-                <td><span class="barcode-display">${item.id || '-'}</span></td>
-                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
-                <td>${item.merk || '-'}</td>
-                <td><span class="barcode-display">${item.sn || '-'}</span></td>
-                <td>${item.lokasi || '-'}</td>
-                <td>${item.checkTime ? formatDateTime(item.checkTime) : '-'}</td>
-            </tr>
-        `;
-    }).join('');
+    renderScanTable();
 }
 
 function sortAndRenderHistory() {
-    const state = sortState['historyTable'];
-    if (!state) return;
-
-    const search = document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value.toLowerCase() : '';
-    const actionFilter = document.getElementById('historyActionFilter') ? document.getElementById('historyActionFilter').value : 'all';
-    const itemFilter = document.getElementById('historyItemFilter') ? document.getElementById('historyItemFilter').value : 'all';
-
-    let filtered = historyData.filter(h => {
-        if (actionFilter !== 'all' && h.action !== actionFilter) return false;
-        if (itemFilter !== 'all' && (!h.itemName || h.itemName.toLowerCase() !== itemFilter.toLowerCase())) return false;
-        if (search) {
-            const matchesSearch =
-                (h.itemId && h.itemId.toLowerCase().includes(search)) ||
-                (h.itemName && h.itemName.toLowerCase().includes(search)) ||
-                (h.details && h.details.toLowerCase().includes(search));
-            if (!matchesSearch) return false;
-        }
-        return true;
-    });
-
-    filtered = sortData(filtered, state.key, state.dir);
-
-    const tableBody = document.getElementById('historyTableBody');
-    const emptyState = document.getElementById('historyEmptyState');
-
-    if (filtered.length === 0) {
-        tableBody.innerHTML = '';
-        if (emptyState) emptyState.style.display = 'block';
-    } else {
-        if (emptyState) emptyState.style.display = 'none';
-        tableBody.innerHTML = filtered.map(h => {
-            const actionClass = h.action.toLowerCase();
-            const actionLabel = h.action === 'CREATE' ? 'Input' : h.action === 'UPDATE' ? 'Update' : 'Delete';
-            return `
-                <tr style="animation: fadeSlideIn 0.5s ease forwards; opacity: 0;">
-                    <td><span class="history-action-badge ${actionClass}">${actionLabel}</span></td>
-                    <td>${h.itemId || '-'}</td>
-                    <td>${h.itemName || '-'}</td>
-                    <td>${h.itemMerk || '-'}</td>
-                    <td>${h.itemSn || '-'}</td>
-                    <td>${h.itemLokasi || '-'}</td>
-                    <td>${h.details || '-'}</td>
-                    <td>${h.timestamp ? formatDateTime(h.timestamp) : '-'}</td>
-                </tr>
-            `;
-        }).join('');
-    }
+    renderHistoryTable();
 }
 
 // ========================================
@@ -3475,74 +3486,230 @@ async function loadHandover() {
     }
 }
 
-function loadItemsByCategory() {
+async function loadItemsByCategory() {
     const kategoriSelect = document.getElementById('handoverKategori');
     const itemSelect = document.getElementById('handoverItem');
     if (!kategoriSelect || !itemSelect) return;
 
-    const kategori = kategoriSelect.value;
+    const kategori = (kategoriSelect.value || '').trim();
 
     if (!kategori) {
-        itemSelect.innerHTML = '<option value="">Pilih Kategori Dulu</option>';
+        itemSelect.innerHTML = '<option value="">Pilih Kategori Terlebih Dahulu</option>';
         itemSelect.disabled = true;
+        if (typeof loadHandoverItemDetails === 'function') loadHandoverItemDetails();
+        return;
+    }
+
+    itemSelect.disabled = true;
+    itemSelect.innerHTML = '<option value="">Memuat unit...</option>';
+
+    // Pastikan inventoryData sudah terisi dari API
+    if (!inventoryData || inventoryData.length === 0) {
+        try {
+            const res = await fetch('/api/inventory');
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                inventoryData = data;
+            }
+        } catch (e) {
+            console.error('[Handover] Gagal memuat inventoryData:', e);
+        }
+    }
+
+    const filteredItems = (inventoryData || []).filter(item => {
+        const itemCat = (item.name || '').toLowerCase().trim();
+        const selCat = kategori.toLowerCase();
+        return itemCat === selCat || itemCat.includes(selCat) || selCat.includes(itemCat);
+    });
+
+    if (filteredItems.length === 0) {
+        itemSelect.innerHTML = `<option value="">Tidak ada unit tersedia untuk kategori "${kategori}"</option>`;
+        itemSelect.disabled = true;
+        if (typeof loadHandoverItemDetails === 'function') loadHandoverItemDetails();
         return;
     }
 
     itemSelect.disabled = false;
-    itemSelect.innerHTML = '<option value="">Pilih Item</option>';
-
-    const filteredItems = inventoryData.filter(item => item.name === kategori);
+    itemSelect.innerHTML = '<option value="">-- Pilih Unit Item --</option>';
 
     filteredItems.forEach(item => {
-        itemSelect.innerHTML += `<option value="${item.id}" data-name="${item.name}" data-merk="${item.merk}" data-sn="${item.sn}" data-lokasi="${item.lokasi}">${item.id} - ${item.name} (${item.merk || '-'})</option>`;
+        const merk = item.merk ? ` (${item.merk})` : '';
+        const sn = item.sn ? ` [SN: ${item.sn}]` : '';
+        itemSelect.innerHTML += `<option value="${item.id}" data-name="${item.name}" data-merk="${item.merk || ''}" data-sn="${item.sn || ''}" data-lokasi="${item.lokasi || ''}">${item.id} - ${item.name}${merk}${sn}</option>`;
     });
+
+    // Otomatis refresh kartu detail aset
+    if (typeof loadHandoverItemDetails === 'function') {
+        loadHandoverItemDetails();
+    }
 }
 
 function loadHandoverItemDetails() {
     const select = document.getElementById('handoverItem');
+    const emptyState = document.getElementById('handoverItemEmptyState');
+    const activeState = document.getElementById('handoverItemActiveState');
     if (!select) return;
 
     const itemId = select.value;
-    const detailId = document.getElementById('detailId');
+    const detailIdBadge = document.getElementById('detailIdBadge');
     const detailNama = document.getElementById('detailNama');
     const detailMerk = document.getElementById('detailMerk');
     const detailSn = document.getElementById('detailSn');
     const detailLokasi = document.getElementById('detailLokasi');
+    const detailKondisiText = document.getElementById('detailKondisiText');
+    const detailKondisiBadge = document.getElementById('detailKondisiBadge');
+    const avatarIcon = document.getElementById('assetAvatarIcon');
+    const miniQr = document.getElementById('handoverMiniQr');
+    const snConverterTile = document.getElementById('detailSnConverterTile');
+    const detailSnConverter = document.getElementById('detailSnConverter');
+
+    // Backward compatibility hidden elements
+    const detailId = document.getElementById('detailId');
     const detailKondisi = document.getElementById('detailKondisi');
 
     if (!itemId) {
+        if (emptyState) emptyState.style.display = 'block';
+        if (activeState) activeState.style.display = 'none';
         if (detailId) detailId.textContent = '-';
-        if (detailNama) detailNama.textContent = '-';
-        if (detailMerk) detailMerk.textContent = '-';
-        if (detailSn) detailSn.textContent = '-';
-        if (detailLokasi) detailLokasi.textContent = '-';
         if (detailKondisi) detailKondisi.textContent = '-';
         return;
     }
 
     const item = inventoryData.find(i => i.id === itemId);
-    const detailSnConverterContainer = document.getElementById('detailSnConverterContainer');
-    const detailSnConverter = document.getElementById('detailSnConverter');
 
     if (item) {
-        if (detailId) detailId.textContent = item.id;
+        if (emptyState) emptyState.style.display = 'none';
+        if (activeState) activeState.style.display = 'flex';
+
+        if (detailIdBadge) detailIdBadge.textContent = item.id;
         if (detailNama) detailNama.textContent = item.name || '-';
         if (detailMerk) detailMerk.textContent = item.merk || '-';
         if (detailSn) detailSn.textContent = item.sn || '-';
         if (detailLokasi) detailLokasi.textContent = item.lokasi || '-';
+
+        // Backward compatibility
+        if (detailId) detailId.textContent = item.id;
         if (detailKondisi) detailKondisi.textContent = item.kondisiAfter || item.kondisiBefore || '-';
 
-        // Handle SN Converter visibility for Headset category
-        if (item.name && item.name.toLowerCase() === 'headset') {
-            if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'block';
-            if (detailSnConverter) detailSnConverter.textContent = item.snConverter || '-';
-        } else {
-            if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'none';
+        // Kondisi text & badge class
+        const kondisi = item.kondisiAfter || item.kondisiBefore || 'Baik';
+        if (detailKondisiText) detailKondisiText.textContent = kondisi;
+        if (detailKondisiBadge) {
+            detailKondisiBadge.className = 'asset-status-pill';
+            if (kondisi === 'Rusak Ringan') {
+                detailKondisiBadge.classList.add('status-rusak-ringan');
+            } else if (kondisi === 'Rusak Berat') {
+                detailKondisiBadge.classList.add('status-rusak-berat');
+            }
+        }
+
+        // Avatar Icon by Category
+        if (avatarIcon) {
+            const cat = (item.name || '').toLowerCase();
+            let iconClass = 'fa-boxes-stacked';
+            let bgGradient = 'linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%)';
+
+            if (cat.includes('laptop')) {
+                iconClass = 'fa-laptop';
+                bgGradient = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+            } else if (cat.includes('pc') || cat.includes('komputer')) {
+                iconClass = 'fa-desktop';
+                bgGradient = 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)';
+            } else if (cat.includes('monitor')) {
+                iconClass = 'fa-tv';
+                bgGradient = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
+            } else if (cat.includes('headset')) {
+                iconClass = 'fa-headphones';
+                bgGradient = 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)';
+            } else if (cat.includes('keyboard')) {
+                iconClass = 'fa-keyboard';
+                bgGradient = 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)';
+            } else if (cat.includes('mouse')) {
+                iconClass = 'fa-mouse';
+                bgGradient = 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)';
+            } else if (cat.includes('tv')) {
+                iconClass = 'fa-tv';
+                bgGradient = 'linear-gradient(135deg, #eab308 0%, #a16207 100%)';
+            }
+
+            avatarIcon.style.background = bgGradient;
+            avatarIcon.innerHTML = `<i class="fas ${iconClass}"></i>`;
+        }
+
+        // SN Converter visibility for Headset
+        if (snConverterTile && detailSnConverter) {
+            if (item.name && item.name.toLowerCase() === 'headset') {
+                snConverterTile.style.display = 'flex';
+                detailSnConverter.textContent = item.snConverter || '-';
+            } else {
+                snConverterTile.style.display = 'none';
+            }
+        }
+
+        // Generate Live Mini QR Code
+        if (miniQr && typeof QRCode !== 'undefined') {
+            miniQr.innerHTML = '';
+            try {
+                new QRCode(miniQr, {
+                    text: `${item.id}|${item.sn || ''}|${item.name || ''}`,
+                    width: 60,
+                    height: 60,
+                    colorDark: '#0f172a',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } catch (err) {
+                console.warn('Mini QR generation error:', err);
+            }
         }
     } else {
-        if (detailSnConverterContainer) detailSnConverterContainer.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+        if (activeState) activeState.style.display = 'none';
     }
 }
+
+function toggleHandoverFields() {
+    const jenis = document.getElementById('handoverJenis') ? document.getElementById('handoverJenis').value : '';
+    const labelDari = document.getElementById('labelHandoverDari');
+    const labelKepada = document.getElementById('labelHandoverKepada');
+    const inputDari = document.getElementById('handoverDari');
+    const inputKepada = document.getElementById('handoverKepada');
+
+    if (jenis === 'Penerimaan') {
+        if (labelDari) labelDari.innerHTML = '<i class="fas fa-truck-loading"></i> Pihak Penyerah (Vendor / Mitra) <span class="required">*</span>';
+        if (labelKepada) labelKepada.innerHTML = '<i class="fas fa-user-check"></i> Pihak Penerima (Admin / Logistik) <span class="required">*</span>';
+        if (inputDari) inputDari.placeholder = 'Contoh: PT Mitra Solusi / Vendor Pengadaan';
+        if (inputKepada) inputKepada.placeholder = 'Nama PIC penerima kantor ICONNET';
+    } else {
+        if (labelDari) labelDari.innerHTML = '<i class="fas fa-user-check"></i> Pihak Penyerah (Dari) <span class="required">*</span>';
+        if (labelKepada) labelKepada.innerHTML = '<i class="fas fa-user-plus"></i> Pihak Penerima (Kepada) <span class="required">*</span>';
+        if (inputDari) inputDari.placeholder = 'Nama pihak yang menyerahkan aset';
+        if (inputKepada) inputKepada.placeholder = 'Nama karyawan penerima aset';
+    }
+}
+
+function generateAutoNoBA() {
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const rand = Math.floor(100 + Math.random() * 900);
+    const noBA = `SMG08.006/ICONNET/BASTB/${mm}-${dd}-${yyyy}/${rand}`;
+    const input = document.getElementById('handoverNoBA');
+    if (input) {
+        input.value = noBA;
+        input.focus();
+        if (typeof showToast === 'function') {
+            showToast('Nomor Berita Acara berhasil dibuat!');
+        }
+    }
+}
+
+// Expose Handover functions globally for seamless HTML interaction
+window.loadItemsByCategory = loadItemsByCategory;
+window.loadHandoverItemDetails = loadHandoverItemDetails;
+window.generateAutoNoBA = generateAutoNoBA;
+window.toggleHandoverFields = toggleHandoverFields;
 
 async function submitHandover(e) {
     e.preventDefault();
@@ -3579,6 +3746,14 @@ async function submitHandover(e) {
         if (data.success) {
             showToast('Serah terima berhasil disimpan!');
             document.getElementById('handoverForm').reset();
+            const itemSelect = document.getElementById('handoverItem');
+            if (itemSelect) {
+                itemSelect.innerHTML = '<option value="">Pilih Kategori Terlebih Dahulu</option>';
+                itemSelect.disabled = true;
+            }
+            if (typeof loadHandoverItemDetails === 'function') {
+                loadHandoverItemDetails();
+            }
             if (signaturePad) signaturePad.clear();
             loadHandover();
         } else {
@@ -3647,6 +3822,10 @@ function filteredHandoverData() {
         return true;
     });
 
+    if (sortState['historyTable'] && sortState['historyTable'].key) {
+        filtered = sortData(filtered, sortState['historyTable'].key, sortState['historyTable'].dir);
+    }
+
     // Apply sorting
     if (handoverSortKey) {
         filtered.sort(function (a, b) {
@@ -3707,26 +3886,64 @@ function renderHandoverTable() {
         if (pagination) pagination.style.display = 'flex';
 
         tableBody.innerHTML = paginatedData.map(h => {
-            const warna = h.jenis === 'Penerimaan' ? '#10b981' : '#f59e0b';
+            const isPenerimaan = (h.jenis || '').toLowerCase().includes('penerimaan');
+            const jenisClass = isPenerimaan ? 'pill-penerimaan' : 'pill-penyerahan';
+            const jenisIcon = isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up';
+            const tgl = formatTanggalIndonesia(h.tanggal_serah_terima) || '-';
+
+            const condBefore = (h.kondisi_before || 'Baik').trim();
+            const condAfter = (h.kondisi_after || 'Baik').trim();
+            const condBeforeClass = condBefore.toLowerCase().replace(/\s+/g, '-');
+            const condAfterClass = condAfter.toLowerCase().replace(/\s+/g, '-');
+
             return `
                 <tr data-id="${h.id}">
-                    <td><input type="checkbox" class="handover-row-checkbox" value="${h.id}" onchange="toggleHandoverSelection('${h.id}')"></td>
-                    <td><span style="color: ${warna}; font-weight: bold;">${h.jenis}</span></td>
-                    <td>${h.no_berita_acara || '-'}</td>
-                    <td>${h.item_id || '-'}</td>
-                    <td>${h.item_name || '-'}</td>
-                    <td>${h.pihak_penyerah || '-'}</td>
-                    <td>${h.pihak_penerima || '-'}</td>
-                    <td>${formatTanggalIndonesia(h.tanggal_serah_terima) || '-'}</td>
-                    <td>${h.kondisi_before || '-'}</td>
-                    <td>${h.kondisi_after || '-'}</td>
-                    <td>${h.lokasi_baru || '-'}</td>
-                    <td>${h.catatan || '-'}</td>
-                    <td>${h.timestamp ? formatTanggalIndonesia(h.timestamp, true) : '-'}</td>
+                    <td style="text-align: center;">
+                        <input type="checkbox" class="handover-row-checkbox" value="${h.id}" onchange="toggleHandoverSelection('${h.id}')" ${selectedHandoverItems.has(h.id) ? 'checked' : ''}>
+                    </td>
                     <td>
-                        <div class="btn-aksi">
-                            <button class="btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BA PDF"><i class="fas fa-file-pdf"></i></button>
-                            <button class="btn-excel" onclick="generateBA_excel('${h.id}')" title="Download BA Excel"><i class="fas fa-file-excel"></i></button>
+                        <div class="doc-cell">
+                            <span class="ba-number-chip" onclick="openHandoverDetailModal('${h.id}')" title="Klik untuk lihat detail">${h.no_berita_acara || 'Tanpa No. BA'}</span>
+                            <span class="doc-date"><i class="far fa-calendar-alt"></i> ${tgl}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="handover-pill ${jenisClass}">
+                            <i class="fas ${jenisIcon}"></i> ${h.jenis || '-'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="unit-cell">
+                            <span class="unit-name">${h.item_name || 'Item'}</span>
+                            <span class="unit-id-badge">#${h.item_id || '-'}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="transfer-flow">
+                            <span class="party-tag sender" title="Penyerah: ${h.pihak_penyerah || '-'}"><i class="fas fa-user-circle"></i> ${h.pihak_penyerah || '-'}</span>
+                            <i class="fas fa-arrow-right flow-arrow"></i>
+                            <span class="party-tag receiver" title="Penerima: ${h.pihak_penerima || '-'}"><i class="fas fa-user-check"></i> ${h.pihak_penerima || '-'}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="condition-flow">
+                            <span class="cond-pill cond-${condBeforeClass}">${condBefore}</span>
+                            <span class="cond-arrow">➔</span>
+                            <span class="cond-pill cond-${condAfterClass}">${condAfter}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="location-notes">
+                            <span class="loc-tag"><i class="fas fa-map-marker-alt"></i> ${h.lokasi_baru || 'Kantor'}</span>
+                            ${h.catatan ? `<span class="notes-preview" title="${h.catatan}"><i class="fas fa-comment-dots"></i> ${h.catatan}</span>` : ''}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="table-actions-cluster">
+                            <button class="btn-action-icon btn-view" onclick="openHandoverDetailModal('${h.id}')" title="Lihat Detail BASTB & TTD"><i class="fas fa-eye"></i></button>
+                            <button class="btn-action-icon btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BASTB PDF"><i class="fas fa-file-pdf"></i></button>
+                            <button class="btn-action-icon btn-excel" onclick="generateBA_excel('${h.id}')" title="Download BASTB Excel"><i class="fas fa-file-excel"></i></button>
+                            <button class="btn-action-icon btn-del" onclick="deleteSingleHandover('${h.id}')" title="Hapus Data"><i class="fas fa-trash-alt"></i></button>
                         </div>
                     </td>
                 </tr>
@@ -3825,6 +4042,98 @@ async function deleteSelectedHandover() {
         showToast('Gagal menghapus!', true);
     }
 }
+
+async function deleteSingleHandover(id) {
+    if (!confirm('Apakah Anda yakin ingin menghapus data serah terima ini?')) return;
+    try {
+        const response = await fetch('/api/handover/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [id] })
+        });
+        const data = await response.json();
+        if (data.success) {
+            handoverData = handoverData.filter(h => h.id != id);
+            selectedHandoverItems.delete(id);
+            updateHandoverSelectedCount();
+            renderHandoverTable();
+            showToast('Data serah terima berhasil dihapus');
+        } else {
+            showToast('Gagal menghapus data!', true);
+        }
+    } catch (e) {
+        console.error('Error delete handover:', e);
+        showToast('Gagal menghapus data!', true);
+    }
+}
+
+function openHandoverDetailModal(id) {
+    const item = handoverData.find(h => h.id == id);
+    if (!item) {
+        showToast('Data serah terima tidak ditemukan!', true);
+        return;
+    }
+
+    const modal = document.getElementById('handoverDetailModal');
+    if (!modal) return;
+
+    const modalNo = document.getElementById('modalBastbNo');
+    const modalJenis = document.getElementById('modalBastbJenis');
+    const modalTanggal = document.getElementById('modalBastbTanggal');
+    const modalPenyerah = document.getElementById('modalBastbPenyerah');
+    const modalPenerima = document.getElementById('modalBastbPenerima');
+    const modalItemName = document.getElementById('modalBastbItemName');
+    const modalItemId = document.getElementById('modalBastbItemId');
+    const modalMerk = document.getElementById('modalBastbMerk');
+    const modalSn = document.getElementById('modalBastbSn');
+    const modalKondisiBefore = document.getElementById('modalBastbKondisiBefore');
+    const modalKondisiAfter = document.getElementById('modalBastbKondisiAfter');
+    const modalLokasi = document.getElementById('modalBastbLokasi');
+    const modalCatatan = document.getElementById('modalBastbCatatan');
+
+    if (modalNo) modalNo.textContent = item.no_berita_acara || '-';
+    if (modalJenis) modalJenis.textContent = item.jenis || '-';
+    if (modalTanggal) modalTanggal.textContent = formatTanggalIndonesia(item.tanggal_serah_terima) || '-';
+    if (modalPenyerah) modalPenyerah.textContent = item.pihak_penyerah || '-';
+    if (modalPenerima) modalPenerima.textContent = item.pihak_penerima || '-';
+    if (modalItemName) modalItemName.textContent = item.item_name || '-';
+    if (modalItemId) modalItemId.textContent = '#' + (item.item_id || '-');
+    if (modalMerk) modalMerk.textContent = item.item_merk || '-';
+    if (modalSn) modalSn.textContent = item.item_sn || '-';
+    if (modalKondisiBefore) modalKondisiBefore.textContent = item.kondisi_before || 'Baik';
+    if (modalKondisiAfter) modalKondisiAfter.textContent = item.kondisi_after || 'Baik';
+    if (modalLokasi) modalLokasi.textContent = item.lokasi_baru || 'Kantor';
+    if (modalCatatan) modalCatatan.textContent = item.catatan || 'Tidak ada catatan tambahan';
+
+    // Signature preview
+    const sigImg = document.getElementById('modalBastbSignatureImg');
+    const noSigNotice = document.getElementById('modalBastbNoSignature');
+    if (item.signature && item.signature.startsWith('data:image')) {
+        if (sigImg) {
+            sigImg.src = item.signature;
+            sigImg.style.display = 'block';
+        }
+        if (noSigNotice) noSigNotice.style.display = 'none';
+    } else {
+        if (sigImg) sigImg.style.display = 'none';
+        if (noSigNotice) noSigNotice.style.display = 'block';
+    }
+
+    // Action button bindings
+    const btnPdf = document.getElementById('modalBastbBtnPdf');
+    if (btnPdf) {
+        btnPdf.onclick = () => generateBA_pdf(item.id);
+    }
+    const btnExcel = document.getElementById('modalBastbBtnExcel');
+    if (btnExcel) {
+        btnExcel.onclick = () => generateBA_excel(item.id);
+    }
+
+    modal.classList.add('show');
+}
+
+window.openHandoverDetailModal = openHandoverDetailModal;
+window.deleteSingleHandover = deleteSingleHandover;
 
 function formatTanggalIndonesia(dateStr, includeTime) {
     if (!dateStr) return '-';
@@ -4508,13 +4817,8 @@ function toggleTheme() {
         themeToggle.innerHTML = newTheme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
     }
     // Update charts text color if they exist
-    if (inventoryDistChart) {
-        const textColor = newTheme === 'dark' ? '#f8fafc' : '#0f172a';
-        inventoryDistChart.options.plugins.legend.labels.color = textColor;
-        inventoryDistChart.update();
-        conditionChart.options.scales.y.ticks.color = textColor;
-        conditionChart.options.scales.x.ticks.color = textColor;
-        conditionChart.update();
+    if (typeof updateChartsData === 'function') {
+        updateChartsData();
     }
 }
 
@@ -4566,95 +4870,300 @@ function initSignaturePad() {
     }
 }
 
+// ========================================
+// MODERN APEXCHARTS & FALLBACK ANALYTICS
+// ========================================
+let apexDistChart = null;
+let apexCondChart = null;
+
 function initCharts() {
+    const theme = document.body.getAttribute('data-theme') || localStorage.getItem('theme') || 'dark';
+    const isDark = theme === 'dark';
+    const textColor = isDark ? '#cbd5e1' : '#334155';
+    const bgCutout = isDark ? '#0f172a' : '#ffffff';
+
+    // 1. Check if ApexCharts is available
+    if (typeof ApexCharts !== 'undefined' && document.getElementById('inventoryDistChartApex')) {
+        const distEl = document.getElementById('inventoryDistChartApex');
+        const condEl = document.getElementById('conditionChartApex');
+
+        if (distEl && !apexDistChart) {
+            const distOptions = {
+                chart: {
+                    type: 'donut',
+                    height: 310,
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    toolbar: { show: false },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 700
+                    }
+                },
+                series: [1],
+                labels: ['Memuat...'],
+                colors: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#f43f5e'],
+                stroke: {
+                    width: 3,
+                    colors: [bgCutout]
+                },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '70%',
+                            labels: {
+                                show: true,
+                                name: {
+                                    show: true,
+                                    fontSize: '12px',
+                                    color: textColor,
+                                    offsetY: -4
+                                },
+                                value: {
+                                    show: true,
+                                    fontSize: '22px',
+                                    fontFamily: "'Outfit', sans-serif",
+                                    fontWeight: 800,
+                                    color: isDark ? '#f8fafc' : '#0f172a',
+                                    offsetY: 6,
+                                    formatter: val => val + ' Unit'
+                                },
+                                total: {
+                                    show: true,
+                                    label: 'Total Aset',
+                                    color: textColor,
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    formatter: w => {
+                                        return w.globals.seriesTotals.reduce((a, b) => a + b, 0) + ' Unit';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                dataLabels: { enabled: false },
+                legend: {
+                    position: 'bottom',
+                    fontSize: '12px',
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    labels: { colors: textColor },
+                    itemMargin: { horizontal: 6, vertical: 4 }
+                },
+                tooltip: {
+                    theme: isDark ? 'dark' : 'light',
+                    y: { formatter: val => val + ' Unit' }
+                }
+            };
+            apexDistChart = new ApexCharts(distEl, distOptions);
+            apexDistChart.render();
+        }
+
+        if (condEl && !apexCondChart) {
+            const condOptions = {
+                chart: {
+                    type: 'bar',
+                    height: 310,
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    toolbar: { show: false },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 700
+                    }
+                },
+                series: [{
+                    name: 'Jumlah Aset',
+                    data: [0, 0, 0]
+                }],
+                colors: ['#10b981', '#f59e0b', '#ef4444'],
+                plotOptions: {
+                    bar: {
+                        columnWidth: '38%',
+                        borderRadius: 8,
+                        borderRadiusApplication: 'end',
+                        distributed: true,
+                        dataLabels: { position: 'top' }
+                    }
+                },
+                dataLabels: {
+                    enabled: true,
+                    formatter: val => val,
+                    offsetY: -20,
+                    style: {
+                        fontSize: '13px',
+                        fontFamily: "'Outfit', sans-serif",
+                        fontWeight: 700,
+                        colors: [isDark ? '#f8fafc' : '#0f172a']
+                    }
+                },
+                legend: { show: false },
+                grid: {
+                    strokeDashArray: 4,
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+                },
+                xaxis: {
+                    categories: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
+                    labels: {
+                        style: {
+                            fontFamily: "'Plus Jakarta Sans', sans-serif",
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            colors: [textColor, textColor, textColor]
+                        }
+                    },
+                    axisBorder: { show: false },
+                    axisTicks: { show: false }
+                },
+                yaxis: {
+                    labels: {
+                        style: {
+                            fontFamily: "'Plus Jakarta Sans', sans-serif",
+                            fontSize: '11px',
+                            colors: [textColor]
+                        }
+                    }
+                },
+                tooltip: {
+                    theme: isDark ? 'dark' : 'light',
+                    y: { formatter: val => val + ' Unit' }
+                }
+            };
+            apexCondChart = new ApexCharts(condEl, condOptions);
+            apexCondChart.render();
+        }
+        return;
+    }
+
+    // 2. Chart.js Fallback
     const distCanvas = document.getElementById('inventoryDistChart');
     const condCanvas = document.getElementById('conditionChart');
     if (!distCanvas || !condCanvas) return;
+    distCanvas.style.display = 'block';
+    condCanvas.style.display = 'block';
 
     const distCtx = distCanvas.getContext('2d');
     const condCtx = condCanvas.getContext('2d');
 
-    const theme = document.body.getAttribute('data-theme');
-    const textColor = theme === 'dark' ? '#f8fafc' : '#0f172a';
-
-    inventoryDistChart = new Chart(distCtx, {
-        type: 'doughnut',
-        data: {
-            labels: [],
-            datasets: [{
-                data: [],
-                backgroundColor: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { color: textColor }
-                }
-            }
-        }
-    });
-
-    conditionChart = new Chart(condCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
-            datasets: [{
-                label: 'Status Kondisi',
-                data: [0, 0, 0],
-                backgroundColor: ['#10b981', '#f59e0b', '#ef4444']
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { color: textColor },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                },
-                x: {
-                    ticks: { color: textColor },
-                    grid: { display: false }
-                }
+    if (!inventoryDistChart) {
+        inventoryDistChart = new Chart(distCtx, {
+            type: 'doughnut',
+            data: {
+                labels: [],
+                datasets: [{
+                    data: [],
+                    backgroundColor: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'],
+                    borderWidth: 2,
+                    borderColor: bgCutout
+                }]
             },
-            plugins: {
-                legend: { display: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: textColor }
+                    }
+                }
             }
-        }
-    });
+        });
+    }
+
+    if (!conditionChart) {
+        conditionChart = new Chart(condCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
+                datasets: [{
+                    label: 'Status Kondisi',
+                    data: [0, 0, 0],
+                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: textColor },
+                        grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }
+                    },
+                    x: {
+                        ticks: { color: textColor },
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
 }
 
 function updateChartsData() {
     if (!inventoryData || inventoryData.length === 0) return;
-    if (!inventoryDistChart || !conditionChart) initCharts();
-    if (!inventoryDistChart || !conditionChart) return;
+    const theme = document.body.getAttribute('data-theme') || localStorage.getItem('theme') || 'dark';
+    const isDark = theme === 'dark';
 
-    // Distribution
+    // 1. Calculate Distribution Counts
     const dist = {};
     inventoryData.forEach(item => {
-        const name = item.name || item.nama_barang || 'Unknown';
+        const name = (item.name || item.nama_barang || 'Perangkat').trim();
         dist[name] = (dist[name] || 0) + 1;
     });
 
-    inventoryDistChart.data.labels = Object.keys(dist);
-    inventoryDistChart.data.datasets[0].data = Object.values(dist);
-    inventoryDistChart.update();
+    const distLabels = Object.keys(dist);
+    const distSeries = Object.values(dist);
 
-    // Condition
+    // 2. Calculate Condition Counts
     const cond = { 'Baik': 0, 'Rusak Ringan': 0, 'Rusak Berat': 0 };
     inventoryData.forEach(item => {
-        const kAfter = item.kondisiAfter || item.kondisi_after;
-        const kBefore = item.kondisiBefore || item.kondisi_before;
+        const kAfter = (item.kondisiAfter || item.kondisi_after || '').trim();
+        const kBefore = (item.kondisiBefore || item.kondisi_before || 'Baik').trim();
         if (cond[kAfter] !== undefined) cond[kAfter]++;
         else if (cond[kBefore] !== undefined) cond[kBefore]++;
+        else cond['Baik']++;
     });
 
-    conditionChart.data.datasets[0].data = [cond['Baik'], cond['Rusak Ringan'], cond['Rusak Berat']];
-    conditionChart.update();
+    const condSeries = [cond['Baik'], cond['Rusak Ringan'], cond['Rusak Berat']];
+
+    // 3. Update ApexCharts if active
+    if (apexDistChart && apexCondChart) {
+        apexDistChart.updateOptions({
+            labels: distLabels,
+            series: distSeries,
+            stroke: {
+                colors: [isDark ? '#0f172a' : '#ffffff']
+            },
+            tooltip: { theme: isDark ? 'dark' : 'light' }
+        });
+
+        apexCondChart.updateOptions({
+            series: [{
+                name: 'Jumlah Aset',
+                data: condSeries
+            }],
+            tooltip: { theme: isDark ? 'dark' : 'light' }
+        });
+        return;
+    }
+
+    // 4. Update Chart.js if active
+    if (inventoryDistChart && conditionChart) {
+        inventoryDistChart.data.labels = distLabels;
+        inventoryDistChart.data.datasets[0].data = distSeries;
+        inventoryDistChart.update();
+
+        conditionChart.data.datasets[0].data = condSeries;
+        conditionChart.update();
+    } else {
+        initCharts();
+        setTimeout(updateChartsData, 100);
+    }
 }
 
 // ========================================
@@ -5138,7 +5647,11 @@ async function handleCubicleClick(cubicleId) {
     const itemsList = document.getElementById('cubicleItemsList');
     if (!itemsList) return;
 
-    itemsList.innerHTML = '<div class="loading-spinner" style="text-align:center; padding:20px;"><i class="fas fa-circle-notch fa-spin"></i> Loading data...</div>';
+    itemsList.innerHTML = `
+        <div class="skeleton-shimmer" style="height: 50px; margin-bottom: 10px; border-radius: 8px;"></div>
+        <div class="skeleton-shimmer" style="height: 50px; margin-bottom: 10px; border-radius: 8px;"></div>
+        <div class="skeleton-shimmer" style="height: 50px; border-radius: 8px;"></div>
+    `;
 
     // Ensure data is fresh
     const items = inventoryData.filter(item => getCubicleId(item) === cubicleId);

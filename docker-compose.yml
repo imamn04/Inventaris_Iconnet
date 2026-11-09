@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: iconnet_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-IconnetRoot2026!}
+      MYSQL_DATABASE: inventaris_iconnet
+      MYSQL_USER: ${MYSQL_USER:-iconnet_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-IconnetPass2026!}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-IconnetRoot2026!}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - iconnet_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iconnet_app
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: "mysql://${MYSQL_USER:-iconnet_user}:${MYSQL_PASSWORD:-IconnetPass2026!}@mysql:3306/inventaris_iconnet"
+      CORS_ORIGIN: "*"
+      JWT_SECRET: ${JWT_SECRET:-iconnet_inventory_jwt_secret_key_2026_prod}
+    ports:
+      - "3000:3000"
+    volumes:
+      - barcode_storage:/app/barcode
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - iconnet_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: iconnet_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - barcode_storage:/var/www/barcode:ro
+    depends_on:
+      - app
+    networks:
+      - iconnet_network
+
+networks:
+  iconnet_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  barcode_storage:
+    driver: local
+

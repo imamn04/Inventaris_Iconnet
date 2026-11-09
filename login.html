@@ -3,151 +3,553 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Iconnet Inventory</title>
-    
-    <!-- Google Fonts - Poppins -->
+    <title>Login - Iconnet Enterprise Asset Manager</title>
+    <meta name="description" content="Sistem Manajemen Inventaris & Pemetaan Aset Kantor Iconnet. Pengelolaan perangkat TI, denah interaktif, QR Code scanner, dan berita acara serah terima resmi.">
+    <meta name="author" content="Iconnet Dev Team">
+
+    <!-- Open Graph / Twitter -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Iconnet Enterprise Asset Manager">
+    <meta property="og:description" content="Sistem Manajemen Inventaris & Pemetaan Aset Kantor Iconnet dengan Prisma MySQL.">
+    <meta property="og:image" content="/img/logo.png">
+
+    <!-- Google Fonts - Plus Jakarta Sans & Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Font Awesome for icons -->
+    <!-- Font Awesome 6 Pro Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="css/style.css">
+
+    <style>
+        /* ========================================================
+           ULTRA-MODERN AURORA GLASSMORPHISM LOGIN THEME
+           ======================================================== */
+        :root {
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-body);
+            margin: 0;
+            padding: 0;
+            background: #090d16;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        .login-page-v2 {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 24px;
+            background: radial-gradient(circle at 50% 0%, #172554 0%, #090d16 65%);
+            overflow: hidden;
+        }
+
+        /* Cyber grid overlay */
+        .login-grid-bg {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            pointer-events: none;
+        }
+
+        /* Dynamic Aurora Glow Blobs */
+        .aurora-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.5;
+            pointer-events: none;
+            animation: floatGlow 14s ease-in-out infinite alternate;
+        }
+
+        .blob-1 {
+            width: 450px;
+            height: 450px;
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            top: -100px;
+            left: -100px;
+        }
+
+        .blob-2 {
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            bottom: -80px;
+            right: -80px;
+            animation-duration: 18s;
+            animation-delay: -5s;
+        }
+
+        .blob-3 {
+            width: 300px;
+            height: 300px;
+            background: linear-gradient(135deg, #059669, #10b981);
+            top: 40%;
+            right: 15%;
+            opacity: 0.25;
+            animation-duration: 22s;
+        }
+
+        @keyframes floatGlow {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(60px, 40px) scale(1.1); }
+            100% { transform: translate(-40px, -50px) scale(0.95); }
+        }
+
+        /* Glassmorphic Login Card */
+        .glass-login-container {
+            width: 100%;
+            max-width: 440px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px 36px;
+            box-shadow: 
+                0 0 0 1px rgba(255, 255, 255, 0.05),
+                0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                0 0 60px rgba(37, 99, 235, 0.15);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+        }
+
+        .glass-card:hover {
+            box-shadow: 
+                0 0 0 1px rgba(59, 130, 246, 0.3),
+                0 30px 60px -12px rgba(0, 0, 0, 0.8),
+                0 0 80px rgba(37, 99, 235, 0.25);
+        }
+
+        /* Brand Header */
+        .brand-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(37, 99, 235, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 20px;
+        }
+
+        .brand-badge .pulse-dot {
+            width: 7px;
+            height: 7px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulseAnim 2s infinite;
+        }
+
+        @keyframes pulseAnim {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 12px;
+        }
+
+        .logo-img {
+            width: 52px;
+            height: 52px;
+            object-fit: contain;
+            border-radius: 14px;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .brand-title {
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-desc {
+            font-size: 13.5px;
+            color: #94a3b8;
+            margin: 0 0 26px 0;
+            line-height: 1.5;
+        }
+
+        /* Form Groups */
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 8px;
+        }
+
+        .input-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-box i.input-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 15px;
+            transition: color 0.25s ease;
+            pointer-events: none;
+        }
+
+        .custom-input {
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 13px 44px 13px 44px;
+            font-family: var(--font-body);
+            font-size: 14px;
+            color: #ffffff;
+            outline: none;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .custom-input:focus {
+            background: rgba(15, 23, 42, 0.85);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25), 0 0 20px rgba(37, 99, 235, 0.2);
+        }
+
+        .custom-input:focus + .input-icon,
+        .input-box:focus-within i.input-icon {
+            color: #38bdf8;
+        }
+
+        .toggle-pw-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: #64748b;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .toggle-pw-btn:hover {
+            color: #cbd5e1;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        /* Demo Credentials Pill */
+        .demo-pill {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px dashed rgba(59, 130, 246, 0.4);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 22px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .demo-pill strong {
+            color: #38bdf8;
+            font-weight: 600;
+        }
+
+        .btn-fill-demo {
+            background: rgba(37, 99, 235, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #93c5fd;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-fill-demo:hover {
+            background: #2563eb;
+            color: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        /* Submit Button with Sweep Glow */
+        .btn-submit-login {
+            width: 100%;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 14px;
+            padding: 14px 20px;
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.5);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-submit-login::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .btn-submit-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.7);
+        }
+
+        .btn-submit-login:hover::before {
+            left: 100%;
+        }
+
+        .btn-submit-login:active {
+            transform: scale(0.97);
+        }
+
+        /* Error Notification Banner */
+        .error-alert-banner {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #fca5a5;
+            margin-bottom: 20px;
+            animation: shakeAlert 0.4s ease;
+        }
+
+        .error-alert-banner.show {
+            display: flex;
+        }
+
+        @keyframes shakeAlert {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+
+        /* Card Footer */
+        .card-footer-text {
+            text-align: center;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 24px;
+        }
+    </style>
 </head>
 <body>
-    <!-- Login Page -->
-    <div class="login-page" id="loginPage">
-        <!-- Dynamic Background Elements -->
-        <div class="bg-shape shape-1"></div>
-        <div class="bg-shape shape-2"></div>
-        <div class="bg-shape shape-3"></div>
-        
-        <div class="login-card">
-            <div class="login-logo animate-fade-in">
-                <img src="img/logo.png" alt="Iconnet" class="login-logo-img">
-                <h1 class="brand-name">ICONNET</h1>
-                <p class="tagline">Sistem Manajemen Inventaris Pro</p>
-            </div>
-            
-            <div class="login-error" id="loginError">
-                <i class="fas fa-exclamation-circle"></i>
-                <span id="errorMessage">Username atau password salah!</span>
-            </div>
-            
-            <form id="loginForm" class="animate-slide-up">
-                <div class="form-group stagger-1">
-                    <label>Username</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="username" placeholder="Masukkan username" required>
-                        <i class="fas fa-user"></i>
+    <div class="login-page-v2">
+        <!-- Background elements -->
+        <div class="login-grid-bg"></div>
+        <div class="aurora-blob blob-1"></div>
+        <div class="aurora-blob blob-2"></div>
+        <div class="aurora-blob blob-3"></div>
+
+        <div class="glass-login-container">
+            <div class="glass-card">
+                <!-- Brand Badge -->
+                <div class="brand-badge">
+                    <span class="pulse-dot"></span>
+                    <span>Iconnet Asset Manager v2.0</span>
+                </div>
+
+                <!-- Brand Header -->
+                <div class="logo-wrap">
+                    <img src="img/logo.png" alt="Iconnet Logo" class="logo-img" onerror="this.src='img/logo1.png'">
+                    <div>
+                        <h1 class="brand-title">ICONNET</h1>
+                        <span style="font-size: 12px; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Office Inventory Pro</span>
                     </div>
                 </div>
-                
-                <div class="form-group stagger-2">
-                    <label>Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" id="password" placeholder="Masukkan password" required>
-                        <i class="fas fa-lock"></i>
-                        <button type="button" class="password-toggle" id="passwordToggle">
-                            <i class="fas fa-eye"></i>
-                        </button>
+
+                <p class="brand-desc">Masuk untuk mengelola aset hardware, denah kantor interaktif, dan pencatatan serah terima.</p>
+
+                <!-- Error Alert -->
+                <div class="error-alert-banner" id="loginAlert">
+                    <i class="fas fa-circle-exclamation" style="font-size: 16px; color: #ef4444;"></i>
+                    <span id="alertMessage">Username atau password tidak sesuai!</span>
+                </div>
+
+                <!-- Demo Quick Fill Pill -->
+                <div class="demo-pill">
+                    <div>
+                        <i class="fas fa-key" style="margin-right: 6px; color: #38bdf8;"></i>
+                        <span>Akun Demo: <strong>admin</strong> / <strong>admin123</strong></span>
                     </div>
+                    <button type="button" class="btn-fill-demo" id="btnQuickDemo">
+                        <i class="fas fa-wand-magic-sparkles"></i> Auto Fill
+                    </button>
                 </div>
-                
-                <div class="form-options stagger-3">
-                    <label class="remember-me">
-                        <input type="checkbox" id="remember">
-                        <span>Ingat saya</span>
-                    </label>
-                    <a href="#" class="forgot-password">Lupa password?</a>
+
+                <!-- Login Form -->
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label class="form-label" for="username">Username Akun</label>
+                        <div class="input-box">
+                            <i class="fas fa-user input-icon"></i>
+                            <input type="text" id="username" class="custom-input" placeholder="Masukkan username" autocomplete="username" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="password">Kata Sandi</label>
+                        <div class="input-box">
+                            <i class="fas fa-lock input-icon"></i>
+                            <input type="password" id="password" class="custom-input" placeholder="Masukkan kata sandi" autocomplete="current-password" required>
+                            <button type="button" class="toggle-pw-btn" id="togglePasswordBtn" aria-label="Lihat kata sandi">
+                                <i class="fas fa-eye" id="toggleIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; font-size: 13px;">
+                        <label style="display: flex; align-items: center; gap: 8px; color: #94a3b8; cursor: pointer;">
+                            <input type="checkbox" id="rememberMe" style="accent-color: #2563eb; width: 16px; height: 16px; border-radius: 4px;">
+                            <span>Ingat sesi saya</span>
+                        </label>
+                        <span style="color: #64748b; font-size: 12px;"><i class="fas fa-shield-halved" style="color: #10b981;"></i> SSL Secured</span>
+                    </div>
+
+                    <button type="submit" class="btn-submit-login" id="btnSubmit">
+                        <span>Masuk ke Dashboard</span>
+                        <i class="fas fa-arrow-right" style="transition: transform 0.2s ease;"></i>
+                    </button>
+                </form>
+
+                <div class="card-footer-text">
+                    &copy; 2026 PT Indonesia Comnets Plus (Iconnet). All rights reserved.
                 </div>
-                
-                <button type="submit" class="login-btn stagger-4">
-                    <span>Masuk ke Dashboard</span>
-                    <i class="fas fa-arrow-right"></i>
-                </button>
-            </form>
-            
-            <div class="login-footer animate-fade-in">
-                <p>&copy; 2026 Iconnet Inventory System</p>
             </div>
         </div>
     </div>
 
     <script>
-        // Password toggle functionality
-        const passwordToggle = document.getElementById('passwordToggle');
+        // Password Toggle
+        const toggleBtn = document.getElementById('togglePasswordBtn');
         const passwordInput = document.getElementById('password');
+        const toggleIcon = document.getElementById('toggleIcon');
 
-        passwordToggle.addEventListener('click', () => {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            passwordToggle.innerHTML = type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+        toggleBtn.addEventListener('click', () => {
+            const isPassword = passwordInput.getAttribute('type') === 'password';
+            passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+            toggleIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
         });
 
-        // Login functionality
-        const loginForm = document.getElementById('loginForm');
-        const loginError = document.getElementById('loginError');
+        // Quick Fill Demo
+        document.getElementById('btnQuickDemo').addEventListener('click', () => {
+            document.getElementById('username').value = 'admin';
+            document.getElementById('password').value = 'admin123';
+            document.getElementById('loginAlert').classList.remove('show');
+        });
 
-        loginForm.addEventListener('submit', async function(e) {
+        // Login Handler
+        const loginForm = document.getElementById('loginForm');
+        const loginAlert = document.getElementById('loginAlert');
+        const alertMessage = document.getElementById('alertMessage');
+        const btnSubmit = document.getElementById('btnSubmit');
+
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // Add loading state
-            const submitBtn = this.querySelector('.login-btn');
-            const originalBtnContent = submitBtn.innerHTML;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-            
-            const username = document.getElementById('username').value;
+            const originalContent = btnSubmit.innerHTML;
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memverifikasi...';
+            loginAlert.classList.remove('show');
+
+            const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
 
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
 
                 const data = await response.json();
 
-                if (data.success) {
-                    // Success animation
-                    submitBtn.innerHTML = '<i class="fas fa-check"></i> Berhasil!';
-                    submitBtn.style.background = 'var(--success)';
+                if (response.ok && data.success) {
+                    btnSubmit.innerHTML = '<i class="fas fa-check-circle"></i> Berhasil Masuk!';
+                    btnSubmit.style.background = 'linear-gradient(135deg, #16a34a, #15803d)';
                     
+                    sessionStorage.setItem('user', JSON.stringify(data.user));
+                    sessionStorage.setItem('isLoggedIn', 'true');
+
                     setTimeout(() => {
-                        sessionStorage.setItem('user', JSON.stringify(data.user));
-                        sessionStorage.setItem('isLoggedIn', 'true');
                         window.location.href = 'index.html';
-                    }, 800);
+                    }, 600);
                 } else {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnContent;
-                    loginError.classList.add('show');
-                    // Shake animation for error
-                    document.querySelector('.login-card').classList.add('shake');
-                    setTimeout(() => document.querySelector('.login-card').classList.remove('shake'), 500);
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = originalContent;
+                    alertMessage.textContent = data.message || 'Username atau password salah!';
+                    loginAlert.classList.add('show');
                 }
-            } catch (error) {
-                console.error('Login error:', error);
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnContent;
-                document.getElementById('errorMessage').textContent = 'Terjadi kesalahan. Pastikan server sedang berjalan!';
-                loginError.classList.add('show');
+            } catch (err) {
+                console.error('Login error:', err);
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = originalContent;
+                alertMessage.textContent = 'Gagal terhubung ke server. Pastikan server sedang aktif.';
+                loginAlert.classList.add('show');
             }
         });
 
-        // Clear error when typing
-        document.getElementById('username').addEventListener('input', () => {
-            loginError.classList.remove('show');
-        });
-        document.getElementById('password').addEventListener('input', () => {
-            loginError.classList.remove('show');
-        });
+        // Clear error on input
+        document.getElementById('username').addEventListener('input', () => loginAlert.classList.remove('show'));
+        document.getElementById('password').addEventListener('input', () => loginAlert.classList.remove('show'));
     </script>
 </body>
 </html>

@@ -1,0 +1,53 @@
+name: CI/CD Quality Gate & Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Lint, Prisma & Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: inventaris_iconnet
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client & Push DB Schema
+        env:
+          DATABASE_URL: "mysql://root:rootpassword@127.0.0.1:3306/inventaris_iconnet"
+        run: |
+          npx prisma generate
+          npx prisma db push
+          node prisma/seed.js
+
+      - name: Run Integration Test Suite
+        env:
+          PORT: 3000
+          DATABASE_URL: "mysql://root:rootpassword@127.0.0.1:3306/inventaris_iconnet"
+        run: npm test
+
+      - name: Verify Docker Build
+        run: docker build -t iconnet-inventory:test .
+

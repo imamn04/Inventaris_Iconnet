@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique @db.VarChar(191)
+  password  String   @db.VarChar(255)
+  name      String   @db.VarChar(191)
+  role      String   @default("admin") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Inventory {
+  id            String    @id @db.VarChar(100)
+  no            Int?
+  name          String?   @db.VarChar(255)
+  merk          String?   @db.VarChar(255)
+  sn            String?   @db.VarChar(255)
+  snConverter   String?   @map("sn_converter") @db.VarChar(255)
+  lokasi        String?   @db.VarChar(255)
+  kondisiBefore String?   @map("kondisi_before") @db.VarChar(255)
+  checklist     String?   @default("Tidak") @db.VarChar(50)
+  kondisiAfter  String?   @map("kondisi_after") @db.VarChar(255)
+  catatan       String?   @db.Text
+  tanggalMasuk  DateTime? @map("tanggal_masuk") @db.Date
+  date          DateTime? @db.Date
+  qrCode        String?   @map("qr_code") @db.LongText
+  cubicleId     String?   @map("cubicle_id") @db.VarChar(100)
+  checkTime     DateTime? @map("check_time")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("inventory")
+}
+
+model CubiclePosition {
+  cubicleId String   @id @map("cubicle_id") @db.VarChar(100)
+  x         Int      @default(0)
+  y         Int      @default(0)
+  type      String   @default("cubicle") @db.VarChar(50)
+  text      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("cubicle_positions")
+}
+
+model Handover {
+  id                 Int       @id @default(autoincrement())
+  jenis              String    @db.VarChar(100)
+  itemId             String    @map("item_id") @db.VarChar(100)
+  itemName           String?   @map("item_name") @db.VarChar(255)
+  itemMerk           String?   @map("item_merk") @db.VarChar(255)
+  itemSn             String?   @map("item_sn") @db.VarChar(255)
+  itemSnConverter    String?   @map("item_sn_converter") @db.VarChar(255)
+  pihakPenyerah      String?   @map("pihak_penyerah") @db.VarChar(255)
+  pihakPenerima      String?   @map("pihak_penerima") @db.VarChar(255)
+  tanggalSerahTerima DateTime? @map("tanggal_serah_terima") @db.Date
+  kondisiBefore      String?   @map("kondisi_before") @db.VarChar(255)
+  kondisiAfter       String?   @map("kondisi_after") @db.VarChar(255)
+  lokasiBaru         String?   @map("lokasi_baru") @db.VarChar(255)
+  catatan            String?   @db.Text
+  noBeritaAcara      String?   @map("no_berita_acara") @db.VarChar(100)
+  signature          String?   @db.LongText
+  timestamp          DateTime  @default(now())
+
+  @@map("handover")
+}
+
+model SerahTerima {
+  id                 Int       @id @default(autoincrement())
+  kodeTransaksi      String?   @map("kode_transaksi") @db.VarChar(100)
+  itemId             String?   @map("item_id") @db.VarChar(100)
+  itemName           String?   @map("item_name") @db.VarChar(255)
+  itemMerk           String?   @map("item_merk") @db.VarChar(255)
+  itemSn             String?   @map("item_sn") @db.VarChar(255)
+  tanggal            DateTime? @default(now()) @db.Date
+  pemberi            String    @db.VarChar(255)
+  departemenPemberi  String?   @map("departemen_pemberi") @db.VarChar(255)
+  penerima           String    @db.VarChar(255)
+  departemenPenerima String?   @map("departemen_penerima") @db.VarChar(255)
+  kondisiSaatSerah   String?   @map("kondisi_saat_serah") @db.VarChar(255)
+  keterangan         String?   @db.Text
+  status             String    @default("Pending") @db.VarChar(50)
+  noBeritaAcara      String?   @map("no_berita_acara") @db.VarChar(100)
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@map("serah_terima")
+}
+
+model History {
+  id         Int      @id @default(autoincrement())
+  action     String   @db.VarChar(100)
+  itemId     String?  @map("item_id") @db.VarChar(100)
+  itemName   String?  @map("item_name") @db.VarChar(255)
+  itemMerk   String?  @map("item_merk") @db.VarChar(255)
+  itemSn     String?  @map("item_sn") @db.VarChar(255)
+  itemLokasi String?  @map("item_lokasi") @db.VarChar(255)
+  details    String?  @db.Text
+  timestamp  DateTime @default(now())
+
+  @@map("history")
+}
+
+model MapLayout {
+  blockName String @id @map("block_name") @db.VarChar(100)
+  x         Int    @default(0)
+  y         Int    @default(0)
+
+  @@map("map_layout")
+}
+

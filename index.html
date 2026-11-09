@@ -5,12 +5,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Iconnet - Kantor Inventory Manager</title>
+    <meta name="description" content="Dashboard Sistem Manajemen Inventaris dan Pemetaan Aset Kantor Iconnet. Monitoring aset, denah interaktif kubikel, checklist stock opname, dan serah terima perangkat.">
+    <meta name="keywords" content="Iconnet, Inventory, Asset Tracker, QR Code, Cubicle Map, Stock Opname, Handover">
+    <meta name="author" content="Iconnet Dev Team">
 
-    <!-- Google Fonts - Poppins -->
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://inventaris.iconnet.id/">
+    <meta property="og:title" content="Iconnet - Kantor Inventory Manager">
+    <meta property="og:description" content="Dashboard Sistem Manajemen Inventaris dan Pemetaan Aset Kantor Iconnet dengan Prisma MySQL.">
+    <meta property="og:image" content="/img/logo.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Iconnet - Kantor Inventory Manager">
+    <meta property="twitter:description" content="Dashboard Sistem Manajemen Inventaris dan Pemetaan Aset Kantor Iconnet.">
+    <meta property="twitter:image" content="/img/logo.png">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Iconnet Inventory System",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "Enterprise Asset & Inventory Management System for Iconnet.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0"
+      }
+    }
+    </script>
+
+    <!-- Google Fonts - Plus Jakarta Sans & Outfit & Poppins -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -28,7 +59,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
-    <!-- Chart.js for Dashboard Analytics -->
+    <!-- ApexCharts for Stunning Modern Interactive Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <!-- Chart.js for Fallback Analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Signature Pad for Digital Signatures -->
@@ -268,20 +302,22 @@
                     </div>
 
                     <div class="analytics-section">
-                        <div class="chart-container premium-glow"
-                            style="background: var(--bg-card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px var(--shadow-color);">
-                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);"><i
-                                    class="fas fa-chart-pie"></i> Distribusi Inventaris</h3>
-                            <div style="position: relative; height: 300px; display: flex; justify-content: center;">
-                                <canvas id="inventoryDistChart"></canvas>
+                        <div class="chart-container premium-glow">
+                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);">
+                                <i class="fas fa-chart-pie" style="color: #6366f1;"></i> Distribusi Inventaris
+                            </h3>
+                            <div style="position: relative; height: 300px; display: flex; justify-content: center; align-items: center;">
+                                <div id="inventoryDistChartApex" style="width: 100%; height: 100%;"></div>
+                                <canvas id="inventoryDistChart" style="display: none;"></canvas>
                             </div>
                         </div>
-                        <div class="chart-container premium-glow"
-                            style="background: var(--bg-card); padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px -1px var(--shadow-color);">
-                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);"><i
-                                    class="fas fa-chart-bar"></i> Status Kondisi Barang</h3>
-                            <div style="position: relative; height: 300px; display: flex; justify-content: center;">
-                                <canvas id="conditionChart"></canvas>
+                        <div class="chart-container premium-glow">
+                            <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--text-primary);">
+                                <i class="fas fa-chart-bar" style="color: #10b981;"></i> Status Kondisi Barang
+                            </h3>
+                            <div style="position: relative; height: 300px; display: flex; justify-content: center; align-items: center;">
+                                <div id="conditionChartApex" style="width: 100%; height: 100%;"></div>
+                                <canvas id="conditionChart" style="display: none;"></canvas>
                             </div>
                         </div>
                     </div>
@@ -364,30 +400,34 @@
                         </div>
                     </div>
 
-                    <div class="table-container" style="overflow-x: auto;">
-                        <table class="data-table" id="inventoryTable">
+                    <div class="table-container handover-table-wrapper" style="overflow-x: auto;">
+                        <table class="data-table inventory-table-modern" id="inventoryTable">
                             <thead>
                                 <tr>
-                                    <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
-                                    <th class="sortable" data-sort="name">Nama Barang <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="merk">Merk <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="sn">SN <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="snConverter">SN Converter <i
-                                            class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="lokasi">Lokasi <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="kondisiBefore">Kondisi (Before) <i
-                                            class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="kondisiAfter">Kondisi (After) <i
-                                            class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="checklist">Checklist <i class="fas fa-sort"></i>
+                                    <th style="width: 38px; text-align: center;">
+                                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
                                     </th>
-                                    <th class="sortable" data-sort="catatan">Catatan <i class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="tanggalMasuk">Tgl Barang Masuk <i
-                                            class="fas fa-sort"></i></th>
-                                    <th class="sortable" data-sort="date">Tgl Input <i class="fas fa-sort"></i></th>
-                                    <th>QR Code</th>
-                                    <th>Barcode</th>
-                                    <th>Aksi</th>
+                                    <th class="sortable" data-sort="name">
+                                        <i class="fas fa-microchip" style="margin-right: 6px; color: var(--primary);"></i> Unit Aset & ID <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="merk">
+                                        <i class="fas fa-fingerprint" style="margin-right: 6px; color: var(--primary);"></i> Spesifikasi (Merk / SN) <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="lokasi">
+                                        <i class="fas fa-map-marker-alt" style="margin-right: 6px; color: var(--primary);"></i> Lokasi <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="kondisiAfter">
+                                        <i class="fas fa-shield-alt" style="margin-right: 6px; color: var(--primary);"></i> Kondisi Fisik <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="checklist">
+                                        <i class="fas fa-tasks" style="margin-right: 6px; color: var(--primary);"></i> Checklist & Catatan <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th class="sortable" data-sort="date">
+                                        <i class="fas fa-calendar-alt" style="margin-right: 6px; color: var(--primary);"></i> Tanggal & QR <i class="fas fa-sort"></i>
+                                    </th>
+                                    <th style="text-align: center; width: 140px;">
+                                        <i class="fas fa-bolt" style="margin-right: 6px; color: var(--primary);"></i> Aksi
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody id="inventoryTableBody">
@@ -416,125 +456,187 @@
                     </div>
                 </div>
 
-                <!-- Input Inventory Page -->
+                <!-- Input Inventory Page (Modern 2-Column Studio) -->
                 <div class="page" id="inputPage">
-                    <div class="input-inventory-container">
-                        <div class="form-card">
-                            <h2><i class="fas fa-plus-circle"></i> Tambah Inventaris</h2>
-                            <form id="inventoryForm">
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Nama Barang</label>
-                                        <select id="itemName" required>
-                                            <option value="">Pilih Nama Barang</option>
-                                            <option value="Monitor">Monitor</option>
-                                            <option value="Laptop">Laptop</option>
-                                            <option value="Keyboard">Keyboard</option>
-                                            <option value="Mouse">Mouse</option>
-                                            <option value="Headset">Headset</option>
-                                            <option value="PC">PC</option>
-                                            <option value="TV">TV</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Merk</label>
-                                        <input type="text" id="itemMerk" placeholder="Contoh: Samsung, LG, Dell"
-                                            required>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>SN (Serial Number)</label>
-                                        <input type="text" id="itemSn" placeholder="Masukkan nomor seri" required>
-                                    </div>
-                                </div>
-                                <div class="form-row" id="snConverterRow" style="display: none;">
-                                    <div class="form-group-full">
-                                        <label>SN Converter</label>
-                                        <input type="text" id="itemSnConverter"
-                                            placeholder="Masukkan nomor seri converter (jika ada)">
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Lokasi</label>
-                                        <input type="text" id="itemLocation" placeholder="Contoh: Ruang Meeting, Lobby"
-                                            required>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Kondisi (Before)</label>
-                                        <select id="itemKondisiBefore" required>
-                                            <option value="">Pilih Kondisi</option>
-                                            <option value="Baik">Baik</option>
-                                            <option value="Rusak Ringan">Rusak Ringan</option>
-                                            <option value="Rusak Berat">Rusak Berat</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Kondisi (After)</label>
-                                        <select id="itemKondisiAfter" required>
-                                            <option value="">Pilih Kondisi</option>
-                                            <option value="Baik">Baik</option>
-                                            <option value="Rusak Ringan">Rusak Ringan</option>
-                                            <option value="Rusak Berat">Rusak Berat</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Checklist</label>
-                                        <select id="itemChecklist" required>
-                                            <option value="Ya">Ya</option>
-                                            <option value="Tidak">Tidak</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Catatan</label>
-                                        <textarea id="itemCatatan" placeholder="Masukkan catatan (opsional)"></textarea>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Tanggal Barang Masuk</label>
-                                        <input type="date" id="itemTanggalMasuk" required>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group-full">
-                                        <label>Tanggal Input</label>
-                                        <input type="date" id="itemDate" required>
-                                    </div>
-                                </div>
-                                <button type="submit" class="submit-btn">
-                                    <i class="fas fa-save"></i>
-                                    Simpan & Generate QR
-                                </button>
-                            </form>
+                    <div class="scan-container" style="max-width: 1280px; margin: 0 auto;">
+                        <div class="scan-header" style="text-align: center; margin-bottom: 24px;">
+                            <h2 style="font-size: 26px; font-weight: 700; color: var(--text-primary);"><i class="fas fa-plus-circle" style="color: var(--primary); margin-right: 10px;"></i> Registrasi Inventaris Baru</h2>
+                            <p style="color: var(--text-secondary); font-size: 14px;">Tambahkan unit aset ke database dan terbitkan QR Code fisik secara otomatis</p>
                         </div>
 
-                        <div class="qr-display">
-                            <h2><i class="fas fa-qrcode"></i> QR Code</h2>
-                            <div class="qr-placeholder" id="qrPlaceholder">
-                                <i class="fas fa-qrcode"></i>
-                                <span>QR Code akan muncul di sini</span>
+                        <div class="handover-layout-grid">
+                            <!-- Left Column: Compact Form -->
+                            <div class="form-card handover-form-card">
+                                <div class="card-section-header">
+                                    <div class="header-icon-badge">
+                                        <i class="fas fa-laptop-medical"></i>
+                                    </div>
+                                    <div>
+                                        <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--text-primary);">Formulir Identitas Unit</h3>
+                                        <span style="font-size: 12px; color: var(--text-secondary);">Masukkan spesifikasi hardware dan lokasi penempatan</span>
+                                    </div>
+                                </div>
+
+                                <form id="inventoryForm" class="handover-compact-form">
+                                    <!-- Baris 1: Kategori & Merk -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-tags"></i> Nama Barang / Kategori <span class="required">*</span></label>
+                                            <select id="itemName" required onchange="handleNewItemCategoryChange()">
+                                                <option value="">Pilih Kategori</option>
+                                                <option value="Monitor">Monitor</option>
+                                                <option value="Laptop">Laptop</option>
+                                                <option value="Keyboard">Keyboard</option>
+                                                <option value="Mouse">Mouse</option>
+                                                <option value="Headset">Headset</option>
+                                                <option value="PC">PC</option>
+                                                <option value="TV">TV</option>
+                                            </select>
+                                        </div>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-trademark"></i> Merk / Brand <span class="required">*</span></label>
+                                            <input type="text" id="itemMerk" placeholder="Contoh: Dell, Samsung, Apple" required oninput="updateLiveAssetPreview()">
+                                        </div>
+                                    </div>
+
+                                    <!-- Baris 2: Serial Number & SN Converter/Lokasi -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-barcode"></i> Serial Number (SN) <span class="required">*</span></label>
+                                            <input type="text" id="itemSn" placeholder="Nomor seri pada fisik unit" required oninput="updateLiveAssetPreview()">
+                                        </div>
+                                        <div class="compact-field" id="snConverterRow" style="display: none;">
+                                            <label><i class="fas fa-plug"></i> SN Converter</label>
+                                            <input type="text" id="itemSnConverter" placeholder="Nomor seri converter (Headset)" oninput="updateLiveAssetPreview()">
+                                        </div>
+                                        <div class="compact-field" id="lokasiFieldWrap">
+                                            <label><i class="fas fa-map-marker-alt"></i> Lokasi Penempatan <span class="required">*</span></label>
+                                            <input type="text" id="itemLocation" placeholder="Contoh: Cubicle B-04 / Ruang IT" required oninput="updateLiveAssetPreview()">
+                                        </div>
+                                    </div>
+
+                                    <!-- Baris 3: Kondisi Before & After -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-shield-alt"></i> Kondisi Saat Masuk (Before) <span class="required">*</span></label>
+                                            <select id="itemKondisiBefore" required onchange="updateLiveAssetPreview()">
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik" selected>Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-clipboard-check"></i> Kondisi Terkini (After) <span class="required">*</span></label>
+                                            <select id="itemKondisiAfter" required onchange="updateLiveAssetPreview()">
+                                                <option value="">Pilih Kondisi</option>
+                                                <option value="Baik" selected>Baik</option>
+                                                <option value="Rusak Ringan">Rusak Ringan</option>
+                                                <option value="Rusak Berat">Rusak Berat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Baris 4: Status Kelayakan & Tanggal Masuk -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-tasks"></i> Checklist <span class="required">*</span></label>
+                                            <select id="itemChecklist" required>
+                                                <option value="Ya" selected>Ya</option>
+                                                <option value="Tidak">Tidak</option>
+                                            </select>
+                                        </div>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-calendar-alt"></i> Tanggal Barang Masuk <span class="required">*</span></label>
+                                            <input type="date" id="itemTanggalMasuk" required>
+                                        </div>
+                                    </div>
+
+                                    <!-- Baris 5: Tanggal Input Sistem -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-calendar-check"></i> Tanggal Input Sistem <span class="required">*</span></label>
+                                            <input type="date" id="itemDate" required>
+                                        </div>
+                                    </div>
+
+                                    <!-- Baris 6: Catatan Kelengkapan (Full width) -->
+                                    <div class="compact-form-full">
+                                        <label><i class="fas fa-sticky-note"></i> Catatan & Kelengkapan <span style="font-weight: 400; text-transform: none; color: var(--text-tertiary);">(Opsional)</span></label>
+                                        <textarea id="itemCatatan" rows="2" placeholder="Catatan adaptor charger, kabel, box kemasan, kelengkapan lain..."></textarea>
+                                    </div>
+
+                                    <button type="submit" class="submit-btn handover-btn-submit">
+                                        <i class="fas fa-save"></i>
+                                        Simpan & Terbitkan QR Code
+                                    </button>
+                                </form>
                             </div>
-                            <div id="qrcode"></div>
-                            <div class="qr-info" id="qrInfo" style="display: none;">
-                                <h3 id="qrItemName">-</h3>
-                                <p id="qrItemId">ID: -</p>
+
+                            <!-- Right Column: Live Asset Pass & QR Code Card -->
+                            <div class="asset-preview-sidebar">
+                                <div class="form-card asset-card-modern">
+                                    <div class="card-section-header">
+                                        <div class="header-icon-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">
+                                            <i class="fas fa-qrcode"></i>
+                                        </div>
+                                        <div>
+                                            <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--text-primary);">Pratinjau Label & QR Aset</h3>
+                                            <span style="font-size: 12px; color: var(--text-secondary);">Identifikasi otomatis unit yang sedang didaftarkan</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Live Asset Card -->
+                                    <div class="asset-hero-box" style="margin-bottom: 14px;">
+                                        <div class="asset-avatar" id="liveAvatarIcon">
+                                            <i class="fas fa-box"></i>
+                                        </div>
+                                        <div class="asset-hero-meta">
+                                            <div class="asset-tag-id" id="liveIdBadge">#INV-NEW</div>
+                                            <h4 class="asset-name-title" id="liveItemTitle">Pilih Nama Barang...</h4>
+                                            <div class="asset-status-pill" id="liveStatusPill">
+                                                <span class="status-dot"></span>
+                                                <span id="liveStatusText">Baik</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="asset-spec-matrix" style="margin-bottom: 14px;">
+                                        <div class="spec-tile">
+                                            <div class="spec-tile-icon"><i class="fas fa-trademark"></i></div>
+                                            <div class="spec-tile-info">
+                                                <span class="spec-label">Merk / Brand</span>
+                                                <span class="spec-val" id="liveMerk">-</span>
+                                            </div>
+                                        </div>
+                                        <div class="spec-tile">
+                                            <div class="spec-tile-icon"><i class="fas fa-fingerprint"></i></div>
+                                            <div class="spec-tile-info">
+                                                <span class="spec-label">Nomor Seri</span>
+                                                <span class="spec-val font-mono" id="liveSn">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Dynamic QR Box -->
+                                    <div class="qr-display-modern" style="text-align: center; padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md); border: 1.5px dashed var(--border);">
+                                        <div class="qr-placeholder" id="qrPlaceholder" style="padding: 16px 0;">
+                                            <div class="empty-icon-pulse" style="width: 50px; height: 50px; font-size: 20px; margin-bottom: 8px;"><i class="fas fa-qrcode"></i></div>
+                                            <span style="font-size: 12px; color: var(--text-tertiary);">QR Code fisik akan ter-generate saat formulir disimpan</span>
+                                        </div>
+                                        <div id="qrcode" style="display: none; margin: 12px auto; width: fit-content; text-align: center;"></div>
+                                        <div class="qr-info" id="qrInfo" style="display: none; margin-top: 10px;">
+                                            <h4 id="qrItemName" style="font-size: 14px; margin: 0 0 2px; font-weight: 700; color: var(--text-primary);">-</h4>
+                                            <p id="qrItemId" style="font-family: monospace; font-size: 12px; color: var(--primary); font-weight: 700; margin: 0;">ID: -</p>
+                                        </div>
+                                    </div>
+
+                                    <button type="button" class="print-qr-btn" id="printQrBtn" style="margin-top: 14px; width: 100%; height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px;">
+                                        <i class="fas fa-print"></i>
+                                        Cetak Label QR Code
+                                    </button>
+                                </div>
                             </div>
-                            <button class="print-qr-btn" id="printQrBtn">
-                                <i class="fas fa-print"></i>
-                                Cetak QR Code
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -866,41 +968,34 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="table-container" style="overflow-x: auto;">
-                            <table class="data-table" id="handoverTable">
+                        <div class="table-container handover-table-wrapper" style="overflow-x: auto;">
+                            <table class="data-table handover-table-modern" id="handoverTable">
                                 <thead>
                                     <tr>
-                                        <th><input type="checkbox" id="selectAllHandoverCheckbox"
-                                                onchange="toggleSelectAllHandover()"></th>
-                                        <th class="sortable" data-key="jenis" onclick="sortHandoverTable('jenis')">Jenis
-                                            <i class="fas fa-sort"></i></th>
-                                        <th class="sortable" data-key="no_berita_acara"
-                                            onclick="sortHandoverTable('no_berita_acara')">No BA <i
-                                                class="fas fa-sort"></i>
+                                        <th style="width: 38px; text-align: center;">
+                                            <input type="checkbox" id="selectAllHandoverCheckbox" onchange="toggleSelectAllHandover()">
                                         </th>
-                                        <th class="sortable" data-key="item_id" onclick="sortHandoverTable('item_id')">
-                                            ID
-                                            Item <i class="fas fa-sort"></i></th>
-                                        <th class="sortable" data-key="item_name"
-                                            onclick="sortHandoverTable('item_name')">
-                                            Nama Barang <i class="fas fa-sort"></i></th>
-                                        <th class="sortable" data-key="pihak_penyerah"
-                                            onclick="sortHandoverTable('pihak_penyerah')">Penyerah <i
-                                                class="fas fa-sort"></i></th>
-                                        <th class="sortable" data-key="pihak_penerima"
-                                            onclick="sortHandoverTable('pihak_penerima')">Penerima <i
-                                                class="fas fa-sort"></i></th>
-                                        <th class="sortable" data-key="tanggal_serah_terima"
-                                            onclick="sortHandoverTable('tanggal_serah_terima')">Tanggal <i
-                                                class="fas fa-sort"></i></th>
-                                        <th>Kondisi Before</th>
-                                        <th>Kondisi After</th>
-                                        <th>Lokasi Baru</th>
-                                        <th>Catatan</th>
-                                        <th class="sortable" data-key="timestamp"
-                                            onclick="sortHandoverTable('timestamp')">
-                                            Waktu <i class="fas fa-sort"></i></th>
-                                        <th>Aksi</th>
+                                        <th class="sortable" data-key="no_berita_acara" onclick="sortHandoverTable('no_berita_acara')">
+                                            <i class="fas fa-file-invoice" style="margin-right: 6px; color: var(--primary);"></i> Dokumen BA & Tanggal <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-key="jenis" onclick="sortHandoverTable('jenis')">
+                                            <i class="fas fa-exchange-alt" style="margin-right: 6px; color: var(--primary);"></i> Transaksi <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-key="item_name" onclick="sortHandoverTable('item_name')">
+                                            <i class="fas fa-microchip" style="margin-right: 6px; color: var(--primary);"></i> Unit Aset <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th>
+                                            <i class="fas fa-users" style="margin-right: 6px; color: var(--primary);"></i> Pihak (Penyerah ➔ Penerima)
+                                        </th>
+                                        <th>
+                                            <i class="fas fa-shield-alt" style="margin-right: 6px; color: var(--primary);"></i> Kondisi Fisik
+                                        </th>
+                                        <th>
+                                            <i class="fas fa-map-marker-alt" style="margin-right: 6px; color: var(--primary);"></i> Lokasi & Catatan
+                                        </th>
+                                        <th style="text-align: center; width: 140px;">
+                                            <i class="fas fa-bolt" style="margin-right: 6px; color: var(--primary);"></i> Aksi
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody id="handoverTableBody">
@@ -908,7 +1003,7 @@
                             </table>
                             <div class="empty-state" id="handoverEmptyState" style="display: none;">
                                 <i class="fas fa-inbox"></i>
-                                <p>Belum ada data serah terima</p>
+                                <p>Belum ada data serah terima yang tersimpan</p>
                             </div>
                         </div>
                         <div class="pagination" id="handoverPagination"
@@ -931,200 +1026,53 @@
                     </div>
                 </div>
 
-                <!-- Handover Input Page (Form) -->
+                <!-- Handover Input Page (Form & Modern Asset Pass) -->
                 <div class="page" id="handover-inputPage">
-                    <div class="scan-container" style="max-width: 1200px; margin: 0 auto;">
-                        <div class="scan-header" style="text-align: center; margin-bottom: 30px;">
-                            <h2><i class="fas fa-plus-circle"></i> Input Serah Terima</h2>
-                            <p>Kelola penerimaan dan penyerahan barang inventaris</p>
+                    <div class="scan-container" style="max-width: 1280px; margin: 0 auto;">
+                        <div class="scan-header" style="text-align: center; margin-bottom: 24px;">
+                            <h2 style="font-size: 26px; font-weight: 700; color: var(--text-primary);"><i class="fas fa-file-signature" style="color: var(--primary); margin-right: 10px;"></i> Input Serah Terima</h2>
+                            <p style="color: var(--text-secondary); font-size: 14px;">Kelola penerimaan, mutasi, dan penyerahan barang inventaris secara digital</p>
                         </div>
-                        <div class="input-inventory-container">
-                            <div class="form-card">
-                                <h3><i class="fas fa-plus-circle"></i> Form Serah Terima</h3>
-                                <form id="handoverForm">
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Jenis Transaksi</label>
-                                            <select id="handoverJenis" required onchange="toggleHandoverFields()">
-                                                <option value="">Pilih Jenis</option>
-                                                <option value="Penerimaan">Penerimaan (Baru)</option>
-                                                <option value="Penyerahan">Penyerahan</option>
-                                            </select>
-                                        </div>
+                        
+                        <div class="handover-layout-grid">
+                            <!-- Left Column: Compact 2-Column Form -->
+                            <div class="form-card handover-form-card">
+                                <div class="card-section-header">
+                                    <div class="header-icon-badge">
+                                        <i class="fas fa-edit"></i>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>No Berita Acara</label>
-                                            <input type="text" id="handoverNoBA"
-                                                placeholder="Contoh: SMG08.006/ICONNET/BASTB/04-21-2026/0" required>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kategori Barang</label>
-                                            <select id="handoverKategori" required onchange="loadItemsByCategory()">
-                                                <option value="">Pilih Kategori</option>
-                                                <option value="Monitor">Monitor</option>
-                                                <option value="Laptop">Laptop</option>
-                                                <option value="Keyboard">Keyboard</option>
-                                                <option value="Mouse">Mouse</option>
-                                                <option value="Headset">Headset</option>
-                                                <option value="PC">PC</option>
-                                                <option value="TV">TV</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Pilih Item</label>
-                                            <select id="handoverItem" required onchange="loadHandoverItemDetails()"
-                                                disabled>
-                                                <option value="">Pilih Kategori Dulu</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Dari/Kepada Siapa</label>
-                                            <input type="text" id="handoverDari" placeholder="Nama pihak penyerah"
-                                                required>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kepada Siapa</label>
-                                            <input type="text" id="handoverKepada" placeholder="Nama pihak penerima"
-                                                required>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Tanggal Serah Terima</label>
-                                            <input type="date" id="handoverTanggal" required>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kondisi Saat Menyerah</label>
-                                            <select id="handoverKondisiBefore" required>
-                                                <option value="">Pilih Kondisi</option>
-                                                <option value="Baik">Baik</option>
-                                                <option value="Rusak Ringan">Rusak Ringan</option>
-                                                <option value="Rusak Berat">Rusak Berat</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kondisi Saat Diterima</label>
-                                            <select id="handoverKondisiAfter" required>
-                                                <option value="">Pilih Kondisi</option>
-                                                <option value="Baik">Baik</option>
-                                                <option value="Rusak Ringan">Rusak Ringan</option>
-                                                <option value="Rusak Berat">Rusak Berat</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Lokasi Baru (Opsional)</label>
-                                            <input type="text" id="handoverLokasi"
-                                                placeholder="Lokasi baru setelah serah terima">
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Catatan</label>
-                                            <textarea id="handoverCatatan"
-                                                placeholder="Tambahkan catatan (opsional)"></textarea>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label><i class="fas fa-pen-nib" style="color: var(--primary);"></i> Tanda
-                                                Tangan Pihak Penyerah</label>
-                                            <p
-                                                style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">
-                                                <i class="fas fa-info-circle"></i> Khusus tanda tangan dari pihak yang
-                                                <strong>menyerahkan barang</strong>.</p>
-                                            <div class="signature-wrapper">
-                                                <canvas id="signaturePad"></canvas>
-                                                <div class="signature-actions">
-                                                    <button type="button" id="clearSignature"><i
-                                                            class="fas fa-eraser"></i> Hapus</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button type="submit" class="submit-btn">
-                                        <i class="fas fa-save"></i>
-                                        Simpan Serah Terima
-                                    </button>
-                                </form>
-                            </div>
-                            <div class="form-card detail-item-card">
-                                <h3><i class="fas fa-info-circle"></i> Detail Item Terpilih</h3>
-                                <div id="handoverItemDetails" class="detail-item-grid">
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">ID</div>
-                                        <div class="detail-item-value" id="detailId">-</div>
-                                    </div>
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">Nama</div>
-                                        <div class="detail-item-value" id="detailNama">-</div>
-                                    </div>
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">Merk</div>
-                                        <div class="detail-item-value" id="detailMerk">-</div>
-                                    </div>
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">SN</div>
-                                        <div class="detail-item-value" id="detailSn">-</div>
-                                    </div>
-                                    <div id="detailSnConverterContainer" class="detail-item-box" style="display: none;">
-                                        <div class="detail-item-label">SN Converter</div>
-                                        <div class="detail-item-value" id="detailSnConverter">-</div>
-                                    </div>
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">Lokasi</div>
-                                        <div class="detail-item-value" id="detailLokasi">-</div>
-                                    </div>
-                                    <div class="detail-item-box">
-                                        <div class="detail-item-label">Kondisi</div>
-                                        <div class="detail-item-value status-baik" id="detailKondisi">-</div>
+                                    <div>
+                                        <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--text-primary);">Formulir Berita Acara</h3>
+                                        <span style="font-size: 12px; color: var(--text-secondary);">Lengkapi rincian serah terima di bawah ini</span>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Handover/Serah Terima Page -->
-                <div class="page" id="handoverPage">
-                    <div class="scan-container" style="max-width: 1200px; margin: 0 auto;">
-                        <div class="scan-header" style="text-align: center; margin-bottom: 30px;">
-                            <h2><i class="fas fa-handshake"></i> Serah Terima Inventaris</h2>
-                            <p>Kelola penerimaan dan penyerahan barang inventaris</p>
-                        </div>
-
-                        <div class="input-inventory-container"
-                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-                            <div class="form-card">
-                                <h3><i class="fas fa-plus-circle"></i> Form Serah Terima</h3>
-                                <form id="handoverForm">
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Jenis Transaksi</label>
+                                <form id="handoverForm" class="handover-compact-form">
+                                    <!-- Baris 1: Jenis Transaksi & No Berita Acara -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-exchange-alt"></i> Jenis Transaksi <span class="required">*</span></label>
                                             <select id="handoverJenis" required onchange="toggleHandoverFields()">
                                                 <option value="">Pilih Jenis</option>
                                                 <option value="Penerimaan">Penerimaan (Baru)</option>
                                                 <option value="Penyerahan">Penyerahan</option>
                                             </select>
                                         </div>
+                                        <div class="compact-field">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                                <label style="margin: 0;"><i class="fas fa-barcode"></i> No Berita Acara <span class="required">*</span></label>
+                                                <button type="button" class="btn-quick-gen" onclick="generateAutoNoBA()" title="Generate Nomor Berita Acara Otomatis">
+                                                    <i class="fas fa-magic"></i> Auto No
+                                                </button>
+                                            </div>
+                                            <input type="text" id="handoverNoBA" placeholder="Contoh: SMG08.006/ICONNET/BASTB/..." required>
+                                        </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kategori Barang</label>
+
+                                    <!-- Baris 2: Kategori & Pilih Item -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-tags"></i> Kategori Barang <span class="required">*</span></label>
                                             <select id="handoverKategori" required onchange="loadItemsByCategory()">
                                                 <option value="">Pilih Kategori</option>
                                                 <option value="Monitor">Monitor</option>
@@ -1136,131 +1084,177 @@
                                                 <option value="TV">TV</option>
                                             </select>
                                         </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Pilih Item</label>
-                                            <select id="handoverItem" required onchange="loadHandoverItemDetails()"
-                                                disabled>
-                                                <option value="">Pilih Kategori Dulu</option>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-box"></i> Pilih Item Unit <span class="required">*</span></label>
+                                            <select id="handoverItem" required onchange="loadHandoverItemDetails()" disabled>
+                                                <option value="">Pilih Kategori Terlebih Dahulu</option>
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Dari/Kepada Siapa</label>
-                                            <input type="text" id="handoverDari" placeholder="Nama pihak penyerah"
-                                                required>
+
+                                    <!-- Baris 3: Dari (Penyerah) & Kepada (Penerima) -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label id="labelHandoverDari"><i class="fas fa-user-check"></i> Pihak Penyerah (Dari) <span class="required">*</span></label>
+                                            <input type="text" id="handoverDari" placeholder="Nama pihak penyerah" required>
+                                        </div>
+                                        <div class="compact-field">
+                                            <label id="labelHandoverKepada"><i class="fas fa-user-plus"></i> Pihak Penerima (Kepada) <span class="required">*</span></label>
+                                            <input type="text" id="handoverKepada" placeholder="Nama pihak penerima" required>
                                         </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kepada Siapa</label>
-                                            <input type="text" id="handoverKepada" placeholder="Nama pihak penerima"
-                                                required>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Tanggal Serah Terima</label>
+
+                                    <!-- Baris 4: Tanggal & Lokasi Baru -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-calendar-alt"></i> Tanggal Serah Terima <span class="required">*</span></label>
                                             <input type="date" id="handoverTanggal" required>
                                         </div>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-map-marker-alt"></i> Lokasi Baru (Opsional)</label>
+                                            <input type="text" id="handoverLokasi" placeholder="Misal: Cubicle A-12 / Server Room">
+                                        </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kondisi Saat Menyerah</label>
+
+                                    <!-- Baris 5: Kondisi Sebelum & Sesudah -->
+                                    <div class="compact-form-row">
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-shield-alt"></i> Kondisi Saat Menyerah <span class="required">*</span></label>
                                             <select id="handoverKondisiBefore" required>
                                                 <option value="">Pilih Kondisi</option>
-                                                <option value="Baik">Baik</option>
+                                                <option value="Baik" selected>Baik</option>
                                                 <option value="Rusak Ringan">Rusak Ringan</option>
                                                 <option value="Rusak Berat">Rusak Berat</option>
                                             </select>
                                         </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Kondisi Saat Diterima</label>
+                                        <div class="compact-field">
+                                            <label><i class="fas fa-clipboard-check"></i> Kondisi Saat Diterima <span class="required">*</span></label>
                                             <select id="handoverKondisiAfter" required>
                                                 <option value="">Pilih Kondisi</option>
-                                                <option value="Baik">Baik</option>
+                                                <option value="Baik" selected>Baik</option>
                                                 <option value="Rusak Ringan">Rusak Ringan</option>
                                                 <option value="Rusak Berat">Rusak Berat</option>
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Lokasi Baru (Opsional)</label>
-                                            <input type="text" id="handoverLokasi"
-                                                placeholder="Lokasi baru setelah serah terima">
+
+                                    <!-- Baris 6: Catatan Tambahan (Full width) -->
+                                    <div class="compact-form-full">
+                                        <label><i class="fas fa-sticky-note"></i> Catatan Tambahan <span style="font-weight: 400; text-transform: none; color: var(--text-tertiary);">(Opsional)</span></label>
+                                        <textarea id="handoverCatatan" rows="2" placeholder="Catatan kelengkapan fisik, kabel adaptor, kartu garansi, atau catatan khusus..."></textarea>
+                                    </div>
+
+                                    <!-- Baris 7: Tanda Tangan Digital Compact -->
+                                    <div class="compact-form-full signature-container-clean">
+                                        <div class="signature-header-bar">
+                                            <label style="margin: 0;"><i class="fas fa-pen-nib" style="color: var(--primary);"></i> Tanda Tangan Pihak Penyerah</label>
+                                            <button type="button" id="clearSignature" class="btn-clear-sig">
+                                                <i class="fas fa-eraser"></i> Hapus Tanda Tangan
+                                            </button>
+                                        </div>
+                                        <div class="signature-canvas-wrap">
+                                            <canvas id="signaturePad"></canvas>
+                                            <div class="signature-line-guide"><i class="fas fa-file-signature"></i> Bubuhkan tanda tangan di dalam area ini</div>
                                         </div>
                                     </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label>Catatan</label>
-                                            <textarea id="handoverCatatan"
-                                                placeholder="Tambahkan catatan (opsional)"></textarea>
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group-full">
-                                            <label><i class="fas fa-pen-nib" style="color: var(--primary);"></i> Tanda
-                                                Tangan Pihak Penyerah</label>
-                                            <p
-                                                style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 8px;">
-                                                <i class="fas fa-info-circle"></i> Khusus tanda tangan dari pihak yang
-                                                <strong>menyerahkan barang</strong>.</p>
-                                            <div class="signature-wrapper">
-                                                <canvas id="signaturePad2"></canvas>
-                                                <div class="signature-actions">
-                                                    <button type="button" id="clearSignature2"><i
-                                                            class="fas fa-eraser"></i> Hapus</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button type="submit" class="submit-btn">
+
+                                    <button type="submit" class="submit-btn handover-btn-submit">
                                         <i class="fas fa-save"></i>
-                                        Simpan Serah Terima
+                                        Simpan Berita Acara
                                     </button>
                                 </form>
                             </div>
 
-                            <div class="form-card"
-                                style="background: linear-gradient(135deg, #f8fafc, #e2e8f0); padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                                <h3 style="font-size: 14px; margin-bottom: 12px; color: #1e293b;"><i
-                                        class="fas fa-info-circle"></i> Detail Item Terpilih</h3>
-                                <div id="handoverItemDetails"
-                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">ID</div>
-                                        <div style="color: #1e293b; font-weight: 600;" id="detailId">-</div>
+                            <!-- Right Column: Modern Asset Passport / Detail Item Terpilih -->
+                            <div class="asset-preview-sidebar">
+                                <div class="form-card asset-card-modern">
+                                    <div class="card-section-header">
+                                        <div class="header-icon-badge" style="background: rgba(14, 165, 233, 0.15); color: #0ea5e9;">
+                                            <i class="fas fa-id-badge"></i>
+                                        </div>
+                                        <div>
+                                            <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--text-primary);">Detail Item Terpilih</h3>
+                                            <span style="font-size: 12px; color: var(--text-secondary);">Paspor identifikasi unit aset inventaris</span>
+                                        </div>
                                     </div>
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">Nama</div>
-                                        <div style="color: #1e293b; font-weight: 600;" id="detailNama">-</div>
+
+                                    <!-- State 1: Belum Ada Item (Empty State) -->
+                                    <div id="handoverItemEmptyState" class="asset-empty-state">
+                                        <div class="empty-icon-pulse">
+                                            <i class="fas fa-box-open"></i>
+                                        </div>
+                                        <h4>Belum Ada Item Terpilih</h4>
+                                        <p>Silakan pilih <strong>Kategori</strong> dan <strong>Item</strong> pada form di sebelah kiri untuk menampilkan paspor spesifikasi, nomor seri, dan QR code unit.</p>
+                                        
+                                        <div class="asset-tips-box">
+                                            <div class="tips-item"><i class="fas fa-check-circle text-success"></i> Verifikasi nomor seri (SN) pada fisik barang</div>
+                                            <div class="tips-item"><i class="fas fa-check-circle text-success"></i> Pastikan kondisi fisik dicatat dengan jujur</div>
+                                            <div class="tips-item"><i class="fas fa-check-circle text-success"></i> Berita acara tersimpan permanen di database</div>
+                                        </div>
                                     </div>
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">Merk</div>
-                                        <div style="color: #1e293b; font-weight: 600;" id="detailMerk">-</div>
-                                    </div>
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">SN</div>
-                                        <div style="color: #1e293b; font-weight: 600;" id="detailSn">-</div>
-                                    </div>
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">Lokasi</div>
-                                        <div style="color: #1e293b; font-weight: 600;" id="detailLokasi">-</div>
-                                    </div>
-                                    <div
-                                        style="background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                                        <div style="color: #64748b; font-size: 10px;">Kondisi</div>
-                                        <div style="color: #10b981; font-weight: 600;" id="detailKondisi">-</div>
+
+                                    <!-- State 2: Item Terpilih (Active State) -->
+                                    <div id="handoverItemActiveState" class="asset-active-state" style="display: none;">
+                                        <!-- Asset Hero Header -->
+                                        <div class="asset-hero-box">
+                                            <div class="asset-avatar" id="assetAvatarIcon">
+                                                <i class="fas fa-laptop"></i>
+                                            </div>
+                                            <div class="asset-hero-meta">
+                                                <div class="asset-tag-id" id="detailIdBadge">#INV-000</div>
+                                                <h4 class="asset-name-title" id="detailNama">-</h4>
+                                                <div class="asset-status-pill" id="detailKondisiBadge">
+                                                    <span class="status-dot"></span>
+                                                    <span id="detailKondisiText">Baik</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Specification Grid -->
+                                        <div class="asset-spec-matrix">
+                                            <div class="spec-tile">
+                                                <div class="spec-tile-icon"><i class="fas fa-trademark"></i></div>
+                                                <div class="spec-tile-info">
+                                                    <span class="spec-label">Merk / Brand</span>
+                                                    <span class="spec-val" id="detailMerk">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="spec-tile">
+                                                <div class="spec-tile-icon"><i class="fas fa-fingerprint"></i></div>
+                                                <div class="spec-tile-info">
+                                                    <span class="spec-label">Nomor Seri (SN)</span>
+                                                    <span class="spec-val font-mono" id="detailSn">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="spec-tile">
+                                                <div class="spec-tile-icon"><i class="fas fa-map-pin"></i></div>
+                                                <div class="spec-tile-info">
+                                                    <span class="spec-label">Lokasi Saat Ini</span>
+                                                    <span class="spec-val" id="detailLokasi">-</span>
+                                                </div>
+                                            </div>
+                                            <div class="spec-tile" id="detailSnConverterTile" style="display: none;">
+                                                <div class="spec-tile-icon"><i class="fas fa-plug"></i></div>
+                                                <div class="spec-tile-info">
+                                                    <span class="spec-label">SN Converter</span>
+                                                    <span class="spec-val font-mono" id="detailSnConverter">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Hidden fallback elements to ensure 100% backward compatibility -->
+                                        <span id="detailId" style="display:none;">-</span>
+                                        <span id="detailKondisi" style="display:none;">-</span>
+                                        <div id="detailSnConverterContainer" style="display:none;"><span id="detailSnConverterLegacy">-</span></div>
+
+                                        <!-- Live QR Code Stamp -->
+                                        <div class="asset-qr-stamp-box">
+                                            <div id="handoverMiniQr" class="mini-qr-container"></div>
+                                            <div class="qr-stamp-desc">
+                                                <div class="stamp-verified-badge"><i class="fas fa-shield-alt"></i> UNIT TERVERIFIKASI</div>
+                                                <p style="margin: 4px 0 0; font-size: 11px; color: var(--text-tertiary);">Gunakan pemindai QR untuk audit cepat penempatan aset kantor.</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1268,6 +1262,113 @@
                     </div>
                 </div>
         </main>
+    </div>
+
+    <!-- Handover Detail Modal (BASTB Preview & Signature) -->
+    <div class="modal-overlay" id="handoverDetailModal">
+        <div class="modal modal-bastb-preview" style="max-width: 680px;">
+            <div class="modal-header bastb-modal-header">
+                <div class="bastb-header-title">
+                    <div class="bastb-icon-badge">
+                        <i class="fas fa-file-contract"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px;">Berita Acara Serah Terima Barang</h3>
+                        <span class="bastb-doc-no" id="modalBastbNo">SMG08.000/...</span>
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeModal('handoverDetailModal')">&times;</button>
+            </div>
+            <div class="modal-body bastb-modal-body">
+                <!-- Meta summary strip -->
+                <div class="bastb-meta-strip">
+                    <div class="meta-item">
+                        <span class="meta-lbl">Jenis Transaksi</span>
+                        <span class="meta-val" id="modalBastbJenis">Penerimaan</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-lbl">Tanggal Pelaksanaan</span>
+                        <span class="meta-val" id="modalBastbTanggal">-</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-lbl">Lokasi Baru</span>
+                        <span class="meta-val" id="modalBastbLokasi">-</span>
+                    </div>
+                </div>
+
+                <!-- Parties Transfer Box -->
+                <div class="bastb-parties-card">
+                    <div class="party-side sender-side">
+                        <span class="side-role"><i class="fas fa-sign-out-alt"></i> PIHAK PENYERAH (DARI)</span>
+                        <h4 id="modalBastbPenyerah">-</h4>
+                        <span class="side-desc">Menyerahkan aset inventaris</span>
+                    </div>
+                    <div class="parties-divider-icon">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                    <div class="party-side receiver-side">
+                        <span class="side-role"><i class="fas fa-sign-in-alt"></i> PIHAK PENERIMA (KEPADA)</span>
+                        <h4 id="modalBastbPenerima">-</h4>
+                        <span class="side-desc">Menerima aset inventaris</span>
+                    </div>
+                </div>
+
+                <!-- Unit & Condition Box -->
+                <div class="bastb-asset-spec-card">
+                    <div class="asset-spec-header">
+                        <i class="fas fa-boxes-stacked" style="color: var(--primary);"></i>
+                        <div>
+                            <span class="spec-name-lg" id="modalBastbItemName">-</span>
+                            <span class="spec-id-chip" id="modalBastbItemId">#INV-000</span>
+                        </div>
+                    </div>
+                    <div class="bastb-specs-grid">
+                        <div class="bs-spec-row">
+                            <span class="bs-spec-label">Merk / Brand:</span>
+                            <span class="bs-spec-val" id="modalBastbMerk">-</span>
+                        </div>
+                        <div class="bs-spec-row">
+                            <span class="bs-spec-label">Serial Number (SN):</span>
+                            <span class="bs-spec-val font-mono" id="modalBastbSn">-</span>
+                        </div>
+                        <div class="bs-spec-row">
+                            <span class="bs-spec-label">Kondisi Sebelum:</span>
+                            <span class="bs-spec-val" id="modalBastbKondisiBefore">-</span>
+                        </div>
+                        <div class="bs-spec-row">
+                            <span class="bs-spec-label">Kondisi Sesudah:</span>
+                            <span class="bs-spec-val" id="modalBastbKondisiAfter">-</span>
+                        </div>
+                    </div>
+                    <div class="bs-notes-area">
+                        <span class="bs-notes-label"><i class="fas fa-sticky-note"></i> Catatan:</span>
+                        <p id="modalBastbCatatan" class="bs-notes-text">-</p>
+                    </div>
+                </div>
+
+                <!-- Digital Signature Box -->
+                <div class="bastb-signature-preview-card">
+                    <span class="sig-card-title"><i class="fas fa-signature" style="color: var(--primary);"></i> Tanda Tangan Digital Pengesahan Penyerah</span>
+                    <div class="sig-preview-container">
+                        <img id="modalBastbSignatureImg" src="" alt="Tanda Tangan Digital" style="display: none; max-height: 90px; margin: 0 auto; filter: contrast(1.2);">
+                        <div id="modalBastbNoSignature" class="no-sig-text" style="display: none;">
+                            <i class="fas fa-info-circle"></i> Tidak ada tanda tangan digital terlampir pada dokumen ini.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bastb-modal-footer">
+                <button type="button" class="btn-bastb-dl btn-dl-pdf" id="modalBastbBtnPdf">
+                    <i class="fas fa-file-pdf"></i> Unduh PDF Resmi
+                </button>
+                <button type="button" class="btn-bastb-dl btn-dl-excel" id="modalBastbBtnExcel">
+                    <i class="fas fa-file-excel"></i> Unduh Excel
+                </button>
+                <button type="button" class="btn-bastb-close" onclick="closeModal('handoverDetailModal')">
+                    Tutup
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- View Modal -->

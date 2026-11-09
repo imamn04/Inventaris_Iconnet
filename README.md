@@ -1,115 +1,122 @@
-# 📦 Iconnet Inventory System Pro
-> Solusi Manajemen Inventaris Kantor yang Modern, Cerdas, dan Profesional.
+# 📦 Iconnet Enterprise Asset & Inventory Manager
+> Solusi Manajemen Inventaris Kantor & Pemetaan Aset Berbasis **Node.js, Express, Prisma ORM & MySQL**.
 
-Iconnet Inventory System adalah aplikasi berbasis web yang dirancang khusus untuk mengelola aset dan inventaris kantor secara efisien. Dilengkapi dengan fitur pemantauan real-time, tanda tangan digital, dan optimasi mobile.
+![Node.js](https://img.shields.io/badge/Node.js-20.x-green.svg)
+![Prisma](https://img.shields.io/badge/Prisma-5.22.0-blue.svg)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-orange.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)
+![Security](https://img.shields.io/badge/Security-Helmet%20%2B%20Bcrypt%20%2B%20RateLimit-red.svg)
 
 ---
 
 ## 🚀 Fitur Utama
 
-### 📊 Dashboard Analytics (Optimized)
-- **Visualisasi Data**: Grafik distribusi inventaris dan status kondisi barang menggunakan Chart.js.
-- **Statistik Real-time**: Monitoring jumlah monitor, keyboard, PC, dan perangkat lainnya secara instan.
-- **Aktivitas Terbaru**: Riwayat log perubahan data yang langsung terlihat di dashboard.
-- **Hero Card Stats**: Informasi total inventaris dengan tampilan premium yang responsif.
+### 💎 Ultra-Modern Glassmorphism UI (2026 Edition)
+- **Aurora Glow Login Page**: Desain futuristik dengan *dynamic mesh aurora background*, cyber grid overlay, kartu kaca melayang (*frosted glass blur 24px*), dan tombol *Auto Fill* instan untuk testing.
+- **Modern Typography**: Menggunakan kombinasi font kelas atas **Plus Jakarta Sans** (kenyamanan baca teks) dan **Outfit** (judul & display metriks).
+- **Interactive Bento Grid Stat Cards**: Kartu statistik dengan aksen gradien neon untuk masing-masing kategori hardware (Monitor, PC, Laptop, Headset, TV, Keyboard, Mouse) disertai elevasi kartu 3D dan animasi *hover depth*.
+- **Micro-Interactions (Anti-Kaku)**: Respon taktil pegas (`active:scale-95`), *sheen sweep glow* pada tombol utama, dan placeholder *skeleton shimmer wave* (meniadakan teks kaku "Loading...").
 
-### 💎 UI/UX Premium
-- **Glassmorphism Design**: Antarmuka modern dengan efek transparansi dan blur yang elegan.
-- **Dark/Light Mode**: Dukungan mode gelap dan terang yang nyaman di mata.
-- **Professional Login**: Halaman login futuristik dengan animasi premium dan sistem keamanan session.
-- **Fully Responsive**: Tampilan optimal di berbagai perangkat mulai dari Desktop, Tablet, hingga Smartphone (Android/iOS).
+### 🗄️ Backend Modular & Prisma ORM (MySQL Dialect)
+- **Migrasi Penuh ke MySQL**: Sepenuhnya beralih dari PostgreSQL lama ke MySQL melalui **Prisma ORM** yang strongly-typed.
+- **Clean Architecture (`src/`)**:
+  - `src/config/`: Singleton Prisma Client terisolasi.
+  - `src/validators/`: Validasi payload runtime ketat dengan **Zod Schema**.
+  - `src/services/`: Logika bisnis mandiri untuk Inventaris, Denah Kubikel, Serah Terima (Handover), Audit Log Histori, dan Statistik.
+  - `src/controllers/`: Layer HTTP controller yang bersih dan terstruktur.
+  - `src/middlewares/`: Proteksi **Helmet CSP**, **Rate Limiting** per IP/endpoint login, dan **CORS**.
+- **Keamanan Kredensial**: Password admin dienkripsi menggunakan hashing **Bcrypt** dengan salt 10 rounds.
 
-### 🔍 Smart Inventory Control
-- **Scan QR & Barcode**: Fitur integrasi kamera untuk pengecekan barang secara cepat.
-- **Automatic Code Generation**: Generate QR Code dan Barcode (CODE128) secara otomatis untuk setiap item.
-- **Cek Inventaris Massal**: Sistem checklist inventaris yang memudahkan audit aset berkala.
+### 🗺️ Interactive Office Mapping & Floor Plan
+- **Visual Map Designer**: Kanvas interaktif 1500px untuk merancang dan menata letak kubikel kantor secara *drag-and-drop*.
+- **Asset Assignment**: Memetakan inventaris barang langsung ke kode kubikel fisik tertentu.
+- **Live Real-time Monitoring**: Visualisasi status terisi vs kosong di dashboard utama kantor.
 
-### 🗺️ Interactive Office Mapping (New)
-- **Visual Map Designer**: Susun tata letak kubikel secara drag-and-drop pada kanvas digital yang interaktif.
-- **Bulk Placement**: Fitur pilih banyak kubikel sekaligus dan pasang ke denah secara otomatis dengan formasi grid.
-- **Custom Text Labels**: Tambahkan penanda teks kustom (misal: "Area A", "Ruang Meeting") untuk memperjelas pembagian wilayah kantor.
-- **Live Monitoring Dashboard**: Pantau okupansi setiap kubikel secara real-time langsung dari peta interaktif di dashboard.
-
-### ✍️ Digital Signature & Report
-- **Handover Module**: Modul serah terima barang yang dilengkapi dengan **Digital Signature** (Tanda Tangan Digital).
-- **Export Professional**: Ekspor data ke format **Excel** dan **PDF** (Berita Acara) dengan branding Iconnet.
-- **Bulk Operations**: Fitur hapus dan kelola data dalam jumlah banyak secara sekaligus.
+### ✍️ Digital Signature & Handover (Berita Acara)
+- **Form Serah Terima Resmi**: Pencatatan pihak penyerah, pihak penerima, tanggal, perubahan kondisi sebelum/sesudah, dan nomor berita acara otomatis.
+- **Digital Canvas Signature**: Tanda tangan digital langsung di layar perangkat (desktop & mobile).
+- **Export Excel & PDF**: Cetak label barcode/QR terisolasi dan ekspor data ke Excel/PDF siap pakai.
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+## 🛠️ Tech Stack
 
-| Komponen | Teknologi |
+| Layer | Teknologi |
 | :--- | :--- |
-| **Frontend** | HTML5, Vanilla CSS3, JavaScript (ES6+) |
-| **Backend** | Node.js, Express.js |
-| **Database** | PostgreSQL |
-| **Analytics** | Chart.js |
-| **PDF Engine** | jsPDF, jsPDF-AutoTable |
-| **Excel Engine** | ExcelJS |
-| **QR/Barcode** | QRCode.js, JsBarcode |
-| **Signature** | SignaturePad.js |
+| **Frontend** | Semantic HTML5, CSS3 Glassmorphism, Vanilla JS, Plus Jakarta Sans, Outfit, Chart.js, SignaturePad |
+| **Backend Core** | Node.js (v18+/v20 LTS), Express.js |
+| **ORM & Database** | **Prisma ORM 5.22.0** dengan **MySQL 8.0** |
+| **Security & Validation** | Bcrypt.js, Zod, Helmet, Express-Rate-Limit, CORS |
+| **Deployment** | Multi-Stage Dockerfile, Docker Compose, Nginx Reverse Proxy |
 
 ---
 
-## ⚙️ Cara Instalasi
+## ⚙️ Cara Menjalankan Aplikasi
 
-1. **Clone Repositori**
+### Opsi 1: Menjalankan Secara Lokal (Node.js & MySQL)
+
+1. **Clone Repositori:**
    ```bash
    git clone https://github.com/imam-ngh/Iventaris_Iconnet.git
+   cd Iventaris_Iconnet
    ```
 
-2. **Install Dependensi**
+2. **Install Dependensi:**
    ```bash
    npm install
    ```
 
-3. **Konfigurasi Database**
-   Buat file `.env` di direktori utama dan sesuaikan dengan database PostgreSQL Anda:
+3. **Konfigurasi Environment:**
+   Salin `.env.example` menjadi `.env` dan pastikan kredensial MySQL lokal Anda sesuai:
    ```env
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=iventaris_db
-   DB_USER=postgres
-   DB_PASSWORD=your_password
    PORT=3000
+   DATABASE_URL="mysql://root:@localhost:3306/inventaris_iconnet"
    ```
 
-4. **Jalankan Aplikasi**
+4. **Sinkronkan Database & Jalankan Seeder:**
+   ```bash
+   npx prisma db push
+   node prisma/seed.js
+   ```
+
+5. **Jalankan Aplikasi:**
    ```bash
    npm start
+   # atau
+   node server.js
    ```
-   Akses melalui browser di: `http://localhost:3000`
+   Buka di browser: **`http://localhost:3000`**
+
+   **Kredensial Default:**
+   - **Username:** `admin`
+   - **Password:** `admin123`
 
 ---
 
-## 📱 Akses via HP (Mobile)
-Aplikasi ini mendukung akses dari perangkat lain dalam satu jaringan WiFi.
-1. Jalankan `npm start`.
-2. Lihat alamat **Network IP** di terminal (contoh: `http://192.168.x.xx:3000`).
-3. Buka alamat tersebut di browser HP Anda.
+### Opsi 2: Menjalankan dengan Docker Compose (Siap Produksi / VPS)
 
-### 🔍 Fitur Pengecekan Kamera di HP
-Modern browser mewajibkan koneksi **HTTPS** untuk mengakses kamera di perangkat mobile. Kami telah menyediakan sistem SSL otomatis untuk memudahkan pengujian.
+Pastikan Docker & Docker Compose telah terinstall di mesin/server Anda, lalu jalankan:
 
-1.  **Jalankan Generate Sertifikat**:
-    ```bash
-    node create-cert.js
-    ```
-2.  **Akses via IP Network**:
-    Buka alamat `https://192.168.x.xx:3000` (alamat IP Anda) di browser HP.
-3.  **Loloskan Peringatan SSL**:
-    Klik "Advanced/Lanjutan" -> "Proceed/Lanjutkan" pada browser HP untuk memberikan izin akses kamera.
+```bash
+docker-compose up -d --build
+```
+
+Layanan yang otomatis berjalan:
+- **`iconnet_mysql`**: Database MySQL 8.0 utf8mb4 dengan volume data persisten.
+- **`iconnet_app`**: Aplikasi Node.js multi-stage build ber-alokasi RAM aman (`max-old-space-size=1536`).
+- **`iconnet_nginx`**: Nginx Reverse Proxy port 80/443 dengan kompresi Gzip dan cache barcode.
 
 ---
 
-## 🔐 Akun Default
-- **Username**: `admin`
-- **Password**: `admin`
+## 🧪 Pengujian Otomatis (Integration Tests)
+
+Jalankan test suite integrasi API menyeluruh:
+```bash
+npm test
+```
+*Test suite akan menguji status endpoint statistik, otentikasi Bcrypt login, data inventaris, posisi kubikel denah, dan riwayat serah terima.*
 
 ---
 
 ## 📄 Lisensi
-Proyek ini dilisensikan di bawah **MIT License**.
-
-© 2026 Iconnet Inventory System - Developed with ❤️ by ImamN
+Hak Cipta &copy; 2026 PT Indonesia Comnets Plus (Iconnet). Dilindungi Undang-Undang.
