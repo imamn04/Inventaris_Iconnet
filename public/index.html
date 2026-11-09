@@ -673,16 +673,39 @@
                             <div class="scan-box">
                                 <i class="fas fa-barcode"></i>
                                 <input type="text" id="scanInput" placeholder="Scan atau ketik ID barcode..." autofocus>
-                                <button class="scan-btn" id="scanBtn" title="Cek">
+                                <button class="scan-btn" id="scanBtn" title="Cari / Cek ID">
                                     <i class="fas fa-search"></i>
                                 </button>
-                                <button class="camera-btn" id="cameraBtn" title="Buka Kamera Langsung">
+                                <button class="camera-btn" id="cameraBtn" title="Buka Kamera Langsung (Live Scanner)">
+                                    <i class="fas fa-video"></i>
+                                </button>
+                                <button class="camera-btn" id="photoScanBtn" title="Ambil Foto Barcode (Kamera HP)" style="background: linear-gradient(135deg, #10b981, #059669);">
                                     <i class="fas fa-camera"></i>
                                 </button>
-                                <button class="camera-btn" id="photoScanBtn" title="Ambil Foto / Upload Gambar Barcode" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.35);">
+                                <button class="camera-btn" id="galleryScanBtn" title="Pilih Foto dari Galeri" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
                                     <i class="fas fa-image"></i>
                                 </button>
+                                <input type="file" id="scanCameraInput" accept="image/*" capture="environment" style="display: none;">
+                                <input type="file" id="scanGalleryInput" accept="image/*" style="display: none;">
                                 <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display: none;">
+                            </div>
+
+                            <div id="httpsCameraNotice" class="https-camera-notice" style="display: none; margin-top: 14px; padding: 12px 16px; border-radius: 12px; background: rgba(37, 99, 235, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <i class="fas fa-shield-alt" style="font-size: 1.3rem; color: #60a5fa;"></i>
+                                        <div>
+                                            <strong style="color: #ffffff; display: block; font-size: 0.9rem;">Mau Scan Kamera Langsung di HP?</strong>
+                                            <span style="font-size: 0.8rem; color: #cbd5e1;">Browser HP (Safari iOS/Chrome) mewajibkan koneksi HTTPS agar kamera langsung aktif.</span>
+                                        </div>
+                                    </div>
+                                    <a id="httpsSwitchLink" href="#" class="btn-https-switch" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: #2563eb; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);">
+                                        <i class="fas fa-lock"></i> Buka HTTPS (Port 3443)
+                                    </a>
+                                </div>
+                                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px;">
+                                    <i class="fas fa-info-circle"></i> Catatan: Jika HP menampilkan "Koneksi Tidak Privat / Peringatan Sertifikat", klik <b>Lanjutan / Advanced</b> lalu <b>Lanjutkan / Proceed</b> karena sertifikat lokal aman.
+                                </div>
                             </div>
                         </div>
 

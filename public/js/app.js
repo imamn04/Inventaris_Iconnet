@@ -2538,32 +2538,118 @@ function initScanPage() {
 let availableCameras = [];
 let currentCameraIndex = 0;
 
+function preprocessImageFile(file, maxDim = 1200) {
+    return new Promise((resolve) => {
+        if (!file || !file.type || !file.type.startsWith('image/')) {
+            return resolve(file);
+        }
+        const img = new Image();
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            img.onload = function() {
+                try {
+                    let { width, height } = img;
+                    if (width <= maxDim && height <= maxDim) {
+                        return resolve(file);
+                    }
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const processedFile = new File([blob], file.name || 'scanned.jpg', {
+                                type: 'image/jpeg',
+                                lastModified: Date.now()
+                            });
+                            resolve(processedFile);
+                        } else {
+                            resolve(file);
+                        }
+                    }, 'image/jpeg', 0.9);
+                } catch (err) {
+                    console.warn('Canvas resize error, fallback to raw file:', err);
+                    resolve(file);
+                }
+            };
+            img.onerror = function() {
+                resolve(file);
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = function() {
+            resolve(file);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 function setupScannerControls() {
     const photoScanBtn = document.getElementById('photoScanBtn');
+    const galleryScanBtn = document.getElementById('galleryScanBtn');
     const btnCapturePhotoFallback = document.getElementById('btnCapturePhotoFallback');
+    const scanCameraInput = document.getElementById('scanCameraInput');
+    const scanGalleryInput = document.getElementById('scanGalleryInput');
     const scanFileInput = document.getElementById('scanFileInput');
     const cameraSelect = document.getElementById('cameraSelect');
     const switchCameraBtn = document.getElementById('switchCameraBtn');
 
+    // HTTPS notice setup for mobile browsers accessing over HTTP LAN
+    const httpsNotice = document.getElementById('httpsCameraNotice');
+    const httpsSwitchLink = document.getElementById('httpsSwitchLink');
+    if (httpsNotice && httpsSwitchLink) {
+        const isHttpLan = window.location.protocol === 'http:' && 
+                          window.location.hostname !== 'localhost' && 
+                          window.location.hostname !== '127.0.0.1';
+        if (isHttpLan) {
+            httpsNotice.style.display = 'block';
+            httpsSwitchLink.href = `https://${window.location.hostname}:3443/index.html#scanPage`;
+        } else {
+            httpsNotice.style.display = 'none';
+        }
+    }
+
     if (photoScanBtn && !photoScanBtn.dataset.bound) {
         photoScanBtn.dataset.bound = 'true';
-        photoScanBtn.addEventListener('click', triggerPhotoScan);
+        photoScanBtn.addEventListener('click', triggerCameraPhotoScan);
+    }
+
+    if (galleryScanBtn && !galleryScanBtn.dataset.bound) {
+        galleryScanBtn.dataset.bound = 'true';
+        galleryScanBtn.addEventListener('click', triggerGalleryScan);
     }
 
     if (btnCapturePhotoFallback && !btnCapturePhotoFallback.dataset.bound) {
         btnCapturePhotoFallback.dataset.bound = 'true';
-        btnCapturePhotoFallback.addEventListener('click', triggerPhotoScan);
+        btnCapturePhotoFallback.addEventListener('click', triggerCameraPhotoScan);
     }
 
-    if (scanFileInput && !scanFileInput.dataset.bound) {
-        scanFileInput.dataset.bound = 'true';
-        scanFileInput.addEventListener('change', function(e) {
-            if (e.target.files && e.target.files[0]) {
-                handleScanFile(e.target.files[0]);
-                e.target.value = '';
-            }
-        });
+    function bindFileInput(inputEl) {
+        if (inputEl && !inputEl.dataset.bound) {
+            inputEl.dataset.bound = 'true';
+            inputEl.addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    handleScanFile(e.target.files[0]);
+                    e.target.value = '';
+                }
+            });
+        }
     }
+
+    bindFileInput(scanCameraInput);
+    bindFileInput(scanGalleryInput);
+    bindFileInput(scanFileInput);
 
     if (switchCameraBtn && !switchCameraBtn.dataset.bound) {
         switchCameraBtn.dataset.bound = 'true';
@@ -2582,16 +2668,27 @@ function setupScannerControls() {
     }
 }
 
-function triggerPhotoScan() {
-    const fileInput = document.getElementById('scanFileInput');
-    if (fileInput) {
-        fileInput.click();
+function triggerCameraPhotoScan() {
+    const camInput = document.getElementById('scanCameraInput') || document.getElementById('scanFileInput');
+    if (camInput) {
+        camInput.click();
     }
+}
+
+function triggerGalleryScan() {
+    const galleryInput = document.getElementById('scanGalleryInput');
+    if (galleryInput) {
+        galleryInput.click();
+    }
+}
+
+function triggerPhotoScan() {
+    triggerCameraPhotoScan();
 }
 
 async function handleScanFile(file) {
     if (!file) return;
-    showToast('Memproses & memindai foto barcode...', false, 2500);
+    showToast('Memproses & membaca barcode dari foto...', false, 2500);
 
     let scannerInstance = null;
     try {
@@ -2601,15 +2698,32 @@ async function handleScanFile(file) {
         }
 
         scannerInstance = new Html5Qrcode("reader");
-        const decodedText = await scannerInstance.scanFile(file, true);
+
+        // Multi-pass scanning:
+        // Pass 1: Scale to 1200px max (optimal for 1D & 2D barcodes)
+        // Pass 2: Scale to 800px max (better for smaller/dense barcodes)
+        // Pass 3: Original raw file
+        let decodedText = null;
+        const passDimensions = [1200, 800, null];
+
+        for (const dim of passDimensions) {
+            try {
+                const targetFile = dim ? await preprocessImageFile(file, dim) : file;
+                decodedText = await scannerInstance.scanFile(targetFile, true);
+                if (decodedText) break;
+            } catch (errPass) {
+                // Try next resolution pass
+            }
+        }
+
         if (decodedText) {
             onScanSuccess(decodedText, null);
         } else {
-            showToast('Barcode / QR tidak terdeteksi. Pastikan foto cukup dekat dan jelas.', true);
+            showToast('Barcode tidak terbaca dari foto. Pastikan foto tegak, fokus, dan tidak silau.', true, 4500);
         }
     } catch (err) {
         console.error("Gagal membaca barcode dari file/foto:", err);
-        showToast('Barcode tidak terbaca dari foto. Pastikan gambar jelas & tegak lurus.', true);
+        showToast('Barcode tidak terbaca dari foto. Pastikan gambar jelas & tegak lurus.', true, 4500);
     } finally {
         if (scannerInstance) {
             try { await scannerInstance.clear(); } catch(e) {}
@@ -2645,7 +2759,6 @@ async function startCamera(preferredCameraId = null) {
     }
 
     const scannerContainer = document.getElementById('scannerContainer');
-    if (scannerContainer) scannerContainer.style.display = 'block';
 
     if (html5QrcodeScanner) {
         return;
@@ -2655,12 +2768,18 @@ async function startCamera(preferredCameraId = null) {
     const hasMediaDevices = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    // In modern browsers, live camera requires HTTPS on mobile/LAN IP
+    // In modern browsers, live video camera strictly requires HTTPS on mobile/LAN IP
     if (!hasMediaDevices || (!isSecure && !navigator.mediaDevices)) {
-        showToast('Browser membatasi kamera live di IP HTTP LAN. Mengalihkan ke Foto Barcode...', false, 4000);
-        triggerPhotoScan();
+        const httpsNotice = document.getElementById('httpsCameraNotice');
+        if (httpsNotice) {
+            httpsNotice.style.display = 'block';
+            httpsNotice.scrollIntoView({ behavior: 'smooth' });
+        }
+        showToast('Scan kamera live di HP memerlukan HTTPS. Klik tombol "Buka HTTPS" di atas atau gunakan Ambil Foto.', true, 5000);
         return;
     }
+
+    if (scannerContainer) scannerContainer.style.display = 'block';
 
     try {
         html5QrcodeScanner = new Html5Qrcode("reader");
@@ -2724,8 +2843,7 @@ async function startCamera(preferredCameraId = null) {
             try { await html5QrcodeScanner.clear(); } catch(e) {}
             html5QrcodeScanner = null;
         }
-        showToast('Kamera langsung terkendala izin. Mengalihkan ke Foto Barcode...', true, 4000);
-        triggerPhotoScan();
+        showToast('Kamera terkendala izin akses. Pastikan izinkan kamera atau gunakan tombol Ambil Foto Barcode.', true, 4500);
     }
 }
 

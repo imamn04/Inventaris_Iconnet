@@ -2,6 +2,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const selfsigned = require('selfsigned');
 require('dotenv').config();
 
 const prisma = require('./src/config/prisma');
@@ -11,6 +14,7 @@ const { errorHandler } = require('./src/middlewares/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 
 // Security Middlewares
 app.use(helmetMiddleware);
@@ -74,12 +78,37 @@ async function startServer() {
       // Abaikan jika tabel belum siap
     }
 
-    const server = app.listen(PORT, () => {
-      console.log(`[Server] Iconnet Inventory System running on port ${PORT}`);
-      console.log(`[URL] http://localhost:${PORT}`);
+    // Setup SSL certificates for HTTPS (Required for mobile camera access via LAN)
+    let sslOptions = null;
+    const keyPath = path.join(__dirname, 'key.pem');
+    const certPath = path.join(__dirname, 'cert.pem');
+
+    try {
+      let key, cert;
+      if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+        key = fs.readFileSync(keyPath);
+        cert = fs.readFileSync(certPath);
+      } else {
+        console.log('[SSL] Generating self-signed SSL certificate for HTTPS...');
+        const pems = await selfsigned.generate([{ name: 'commonName', value: 'iconnet.local' }], { days: 365 });
+        key = pems.private;
+        cert = pems.cert;
+        fs.writeFileSync(keyPath, key);
+        fs.writeFileSync(certPath, cert);
+      }
+      sslOptions = { key, cert };
+    } catch (sslErr) {
+      console.warn('[SSL] Could not initialize SSL certificates:', sslErr.message);
+    }
+
+    // Start HTTP Server
+    const httpServer = http.createServer(app);
+    httpServer.listen(PORT, () => {
+      console.log(`[HTTP Server] Iconnet Inventory System running on port ${PORT}`);
+      console.log(`[HTTP URL] http://localhost:${PORT}`);
     });
 
-    server.on('error', (err) => {
+    httpServer.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.error(`\n[Server Error] Port ${PORT} sedang digunakan oleh proses lain.`);
         console.error(`Solusi: Ubah PORT di file .env (misal PORT=3005) atau hentikan proses yang memakai port tersebut:`);
@@ -90,10 +119,35 @@ async function startServer() {
       process.exit(1);
     });
 
+    // Start HTTPS Server if certificates available
+    let httpsServer = null;
+    if (sslOptions) {
+      try {
+        httpsServer = https.createServer(sslOptions, app);
+        httpsServer.listen(HTTPS_PORT, () => {
+          console.log(`[HTTPS Server] Secure server running on port ${HTTPS_PORT} (Live Camera Ready)`);
+          console.log(`[HTTPS URL] https://localhost:${HTTPS_PORT}`);
+        });
+
+        httpsServer.on('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            console.warn(`[HTTPS Warning] Port ${HTTPS_PORT} is already in use.`);
+          } else {
+            console.warn('[HTTPS Warning]', err.message);
+          }
+        });
+      } catch (err) {
+        console.warn('[HTTPS Warning] Failed to start HTTPS server:', err.message);
+      }
+    }
+
     // Graceful Shutdown
     const shutdown = async (signal) => {
       console.log(`[Server] Received ${signal}, closing server gracefully...`);
-      server.close(async () => {
+      if (httpsServer) {
+        try { httpsServer.close(); } catch(e) {}
+      }
+      httpServer.close(async () => {
         await prisma.$disconnect();
         console.log('[Database] Disconnected from PostgreSQL.');
         process.exit(0);
