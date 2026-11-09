@@ -560,15 +560,19 @@ function updateRecentActivities() {
             const kondisiBefore = item.kondisi_before || item.kondisiBefore || '-';
             const kondisiAfter = item.kondisi_after || item.kondisiAfter || '-';
 
+            const kbClass = getStatusBadgeClass(kondisiBefore);
+            const kaClass = getStatusBadgeClass(kondisiAfter);
+            const chkClass = item.checklist === 'Ya' ? 'checked' : 'unchecked';
+
             return `
-                <tr style="animation: fadeSlideIn 0.5s ease forwards; animation-delay: ${index * 0.1}s; opacity: 0;">
+                <tr>
                     <td><span class="category-badge ${itemName.toLowerCase().replace(/\s+/g, '-')}">${itemName}</span></td>
                     <td>${item.merk || '-'}</td>
                     <td><span class="barcode-display">${item.sn || '-'}</span></td>
                     <td>${item.lokasi || '-'}</td>
-                    <td><span class="status-badge ${kondisiBefore.replace(/\s+/g, '_').toLowerCase()}">${kondisiBefore}</span></td>
-                    <td><span class="status-badge ${kondisiAfter.replace(/\s+/g, '_').toLowerCase()}">${kondisiAfter}</span></td>
-                    <td><span class="status-badge ${item.checklist || '-'}">${item.checklist || '-'}</span></td>
+                    <td><span class="status-badge ${kbClass}">${kondisiBefore}</span></td>
+                    <td><span class="status-badge ${kaClass}">${kondisiAfter}</span></td>
+                    <td><span class="status-badge ${chkClass}">${item.checklist || '-'}</span></td>
                     <td>${item.catatan || '-'}</td>
                     <td>${item.date || item.created_at || '-'}</td>
                     <td><span class="barcode-display">${item.id || '-'}</span></td>
@@ -5763,16 +5767,81 @@ async function loadCubiclePositions() {
 
 function populateCubicleSuggestions() {
     const datalist = document.getElementById('cubicleSuggestions');
-    if (!datalist || !cubiclePositions || cubiclePositions.length === 0) return;
+    if (!cubiclePositions || cubiclePositions.length === 0) return;
 
+    const uniqueCubicles = getSortedCubicleList();
+    cachedCubiclesList = uniqueCubicles;
+    if (datalist) {
+        datalist.innerHTML = uniqueCubicles.map(id => `<option value="${id}">Kubikel ${id}</option>`).join('');
+    }
+}
+
+let cubiclePickerTargetInput = 'itemLocation';
+let cachedCubiclesList = [];
+
+function getSortedCubicleList() {
+    if (!cubiclePositions || cubiclePositions.length === 0) return [];
     const validCubicles = cubiclePositions
         .filter(p => p.type !== 'label' && p.cubicle_id && !p.cubicle_id.startsWith('LABEL_'))
         .map(p => p.cubicle_id)
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-
-    const uniqueCubicles = [...new Set(validCubicles)];
-    datalist.innerHTML = uniqueCubicles.map(id => `<option value="${id}">Kubikel ${id}</option>`).join('');
+    return [...new Set(validCubicles)];
 }
+
+function openCubiclePicker(targetInputId = 'itemLocation') {
+    cubiclePickerTargetInput = targetInputId;
+    cachedCubiclesList = getSortedCubicleList();
+
+    const searchInput = document.getElementById('cubiclePickerSearch');
+    if (searchInput) searchInput.value = '';
+
+    renderCubiclePickerGrid(cachedCubiclesList);
+    openModal('cubiclePickerModal');
+
+    setTimeout(() => {
+        if (searchInput) searchInput.focus();
+    }, 200);
+}
+
+function renderCubiclePickerGrid(cubicles) {
+    const grid = document.getElementById('cubiclePickerGrid');
+    if (!grid) return;
+
+    if (!cubicles || cubicles.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-tertiary); padding: 20px;">Tidak ada kubikel yang cocok</div>';
+        return;
+    }
+
+    grid.innerHTML = cubicles.map(id => {
+        return `<button type="button" class="cubicle-picker-btn" onclick="selectCubicleForTarget('${id}')">${id}</button>`;
+    }).join('');
+}
+
+function filterCubiclePicker(query) {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+        renderCubiclePickerGrid(cachedCubiclesList);
+        return;
+    }
+    const filtered = cachedCubiclesList.filter(id => id.toLowerCase().includes(q));
+    renderCubiclePickerGrid(filtered);
+}
+
+function selectCubicleForTarget(val) {
+    const targetEl = document.getElementById(cubiclePickerTargetInput);
+    if (targetEl) {
+        targetEl.value = val;
+        // If this is itemLocation, trigger live asset preview
+        if (cubiclePickerTargetInput === 'itemLocation' && typeof updateLiveAssetPreview === 'function') {
+            updateLiveAssetPreview();
+        }
+    }
+    closeModal('cubiclePickerModal');
+}
+
+window.openCubiclePicker = openCubiclePicker;
+window.filterCubiclePicker = filterCubiclePicker;
+window.selectCubicleForTarget = selectCubicleForTarget;
 
 async function renderMap() {
     const activePage = document.querySelector('.page.active');

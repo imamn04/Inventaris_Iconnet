@@ -119,6 +119,9 @@
     --border-light: #1e293b;
     --glass-border: rgba(255, 255, 255, 0.1);
 
+    --success-bg: rgba(16, 185, 129, 0.15);
+    --success-border: rgba(16, 185, 129, 0.35);
+
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
@@ -1094,6 +1097,7 @@ body::after {
     box-shadow: var(--glass-shadow);
     overflow: hidden;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -1770,7 +1774,15 @@ body::after {
 }
 
 .scan-item-checked td {
-    color: #065f46 !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .scan-item-checked {
+    background: rgba(16, 185, 129, 0.14) !important;
+}
+
+[data-theme="dark"] .scan-item-checked td {
+    color: #f8fafc !important;
 }
 
 /* ========================================
@@ -3437,9 +3449,11 @@ justify-content: center;
     }
 
     .table-container {
-        margin: 0 -20px;
-        padding: 0 20px;
-        border-radius: 0;
+        margin: 0;
+        padding: 0;
+        border-radius: var(--radius-lg);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .data-table {
@@ -3557,8 +3571,11 @@ justify-content: center;
     }
 
     .table-container {
-        margin: 0 -16px;
-        padding: 0 16px;
+        margin: 0;
+        padding: 0;
+        border-radius: var(--radius-lg);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .data-table {
@@ -3572,8 +3589,11 @@ justify-content: center;
     }
 
     .action-buttons {
-        flex-direction: column;
-        gap: 4px;
+        flex-direction: row !important;
+        gap: 6px !important;
+        flex-wrap: nowrap !important;
+        align-items: center;
+        justify-content: center;
     }
 
     .action-btn {
@@ -6505,4 +6525,87 @@ td .btn-excel:hover {
 .btn-action-icon.btn-print:hover {
     background: #6366f1;
     color: #ffffff;
+}
+
+/* ======================================================
+   TOUCH-FRIENDLY CUBICLE PICKER (MOBILE & DESKTOP)
+   ====================================================== */
+.btn-cubicle-picker-trigger {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+    flex-shrink: 0;
+}
+
+.btn-cubicle-picker-trigger:hover,
+.btn-cubicle-picker-trigger:active {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.cubicle-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+    max-height: 48vh;
+    overflow-y: auto;
+    padding: 4px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.cubicle-picker-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 12px 6px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+}
+
+.cubicle-picker-btn:hover,
+.cubicle-picker-btn:active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+    transform: scale(1.04);
+}
+
+.cubicle-badge-chip {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+}
+
+.cubicle-badge-chip:hover,
+.cubicle-badge-chip:active {
+    background: var(--primary-subtle);
+    color: var(--primary);
+    border-color: var(--primary);
 }
