@@ -720,6 +720,7 @@ function getInitialPage() {
     // Normalization aliases
     if (page === 'handover') page = 'handover-data';
     if (page === 'map') page = 'map-view';
+    if (page === 'scanPage') page = 'scan';
 
     if (validPages.includes(page)) {
         return page;
@@ -732,6 +733,7 @@ async function navigateTo(page, updateHistory = true) {
     // Alias mappings
     if (page === 'handover') page = 'handover-data';
     if (page === 'map') page = 'map-view';
+    if (page === 'scanPage') page = 'scan';
 
     // 1. Update menu highlight
     document.querySelectorAll('.menu-item').forEach(item => {
@@ -866,6 +868,11 @@ async function loadInventory() {
         inventoryData = await response.json();
         updateDashboard();
         initializePagination();
+
+        // Synchronize Cek Inventaris page
+        if (typeof loadCheckedItems === 'function') loadCheckedItems();
+        if (typeof renderScanTable === 'function') renderScanTable();
+        if (typeof updateScanStats === 'function') updateScanStats();
     } catch (error) {
         console.error('Error loading inventory:', error);
         showToast('Gagal memuat data inventaris!', true);
@@ -2425,10 +2432,14 @@ let checkedItems = {};
 let html5QrcodeScanner = null;
 let scanInitialized = false;
 
-function initScanPage() {
-    loadCheckedItems();
-    renderScanTable();
-    updateScanStats();
+async function initScanPage() {
+    if (!inventoryData || inventoryData.length === 0) {
+        await loadInventory();
+    } else {
+        loadCheckedItems();
+        renderScanTable();
+        updateScanStats();
+    }
 
     if (scanInitialized) {
         const scanInput = document.getElementById('scanInput');
@@ -2922,6 +2933,8 @@ async function performScan() {
             const localIdx = inventoryData.findIndex(i => i.id === item.id);
             if (localIdx !== -1) {
                 inventoryData[localIdx].checklist = 'Ya';
+            } else {
+                await loadInventory();
             }
 
             // Update local checkedItems for immediate UI updates
@@ -3025,11 +3038,18 @@ function showScanResultPopup(item, isDuplicate) {
 let scanPage = 1;
 let scanItemsPerPage = 10;
 
+function updateScanTable() {
+    scanPage = 1;
+    renderScanTable();
+    updateScanStats();
+}
+window.updateScanTable = updateScanTable;
+
 function changeScanPage(direction) {
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
     const limitSelect = document.getElementById('scanViewLimit');
-    scanItemsPerPage = parseInt(limitSelect.value);
+    scanItemsPerPage = limitSelect ? (parseInt(limitSelect.value) || 10) : 10;
 
     let filtered = inventoryData;
     if (filterValue !== 'all') {
@@ -3057,7 +3077,7 @@ function renderScanTable() {
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
     const limitSelect = document.getElementById('scanViewLimit');
-    scanItemsPerPage = parseInt(limitSelect.value);
+    scanItemsPerPage = limitSelect ? (parseInt(limitSelect.value) || 10) : 10;
 
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
