@@ -192,7 +192,11 @@ async function updateInventoryItem(id, data) {
   });
 
   const mapped = mapInventory(updated);
-  await logHistory('UPDATE', mapped, `Memperbarui item: ${mapped.name} (${id})`);
+  // Jangan catat log UPDATE jika request ini semata-mata adalah penyimpanan QR Code inisial
+  const isQrOnlyUpdate = Object.keys(data).every(k => k === 'qrCode' || k === 'id');
+  if (!isQrOnlyUpdate) {
+    await logHistory('UPDATE', mapped, `Memperbarui item: ${mapped.name} (${id})`);
+  }
   return mapped;
 }
 

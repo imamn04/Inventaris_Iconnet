@@ -1001,7 +1001,9 @@ function updateActionButtons() {
     updateSelectedCount();
 }
 
+let isDeletingInventory = false;
 async function deleteSelectedItems() {
+    if (isDeletingInventory) return;
     if (selectedItems.size === 0) {
         showToast('Pilih item yang ingin dihapus!', true);
         return;
@@ -1010,6 +1012,7 @@ async function deleteSelectedItems() {
     const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedItems.size} item?`);
     if (!confirmDelete) return;
 
+    isDeletingInventory = true;
     try {
         const response = await fetch('/api/inventory/bulk-delete', {
             method: 'POST',
@@ -1031,6 +1034,8 @@ async function deleteSelectedItems() {
     } catch (error) {
         console.error('Error deleting selected items:', error);
         showToast('Gagal menghapus item!', true);
+    } finally {
+        isDeletingInventory = false;
     }
 }
 
@@ -2355,6 +2360,7 @@ function initScanPage() {
         if (scanInput) scanInput.focus();
         return;
     }
+    scanInitialized = true;
 
     // Set up scan input
     const scanInput = document.getElementById('scanInput');
@@ -2392,8 +2398,11 @@ function initScanPage() {
 
     // Reset button
     if (resetBtn) {
+        let isResetting = false;
         resetBtn.addEventListener('click', async function () {
+            if (isResetting) return;
             if (confirm('Apakah Anda yakin ingin mereset semua checklist di database?')) {
+                isResetting = true;
                 try {
                     const response = await fetch('/api/inventory/reset-checklist', { method: 'POST' });
                     const data = await response.json();
@@ -2414,6 +2423,8 @@ function initScanPage() {
                 } catch (error) {
                     console.error('Error resetting checklist:', error);
                     showToast('Terjadi kesalahan saat mereset!', true);
+                } finally {
+                    isResetting = false;
                 }
             }
         });
@@ -4455,7 +4466,9 @@ function updateHandoverSelectedCount() {
     }
 }
 
+let isDeletingHandover = false;
 async function deleteSelectedHandover() {
+    if (isDeletingHandover) return;
     if (selectedHandoverItems.size === 0) {
         showToast('Pilih item yang ingin dihapus!', true);
         return;
@@ -4464,6 +4477,7 @@ async function deleteSelectedHandover() {
     const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedHandoverItems.size} data?`);
     if (!confirmDelete) return;
 
+    isDeletingHandover = true;
     try {
         const response = await fetch('/api/handover/bulk-delete', {
             method: 'POST',
@@ -4482,6 +4496,8 @@ async function deleteSelectedHandover() {
     } catch (error) {
         console.error('Error deleting handover:', error);
         showToast('Gagal menghapus!', true);
+    } finally {
+        isDeletingHandover = false;
     }
 }
 
