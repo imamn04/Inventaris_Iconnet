@@ -23,7 +23,23 @@ const inventoryItemSchema = z.object({
   checkTime: z.string().optional().nullable()
 });
 
-const inventoryUpdateSchema = inventoryItemSchema.partial();
+const inventoryUpdateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, 'Nama item wajib diisi').trim().optional(),
+  merk: z.string().optional(),
+  sn: z.string().optional(),
+  snConverter: z.string().optional(),
+  lokasi: z.string().optional(),
+  kondisiBefore: z.string().optional(),
+  checklist: z.string().optional(),
+  kondisiAfter: z.string().optional(),
+  catatan: z.string().optional(),
+  tanggalMasuk: z.string().optional().nullable(),
+  date: z.string().optional().nullable(),
+  qrCode: z.string().optional(),
+  cubicle_id: z.string().optional(),
+  checkTime: z.string().optional().nullable()
+});
 
 const bulkDeleteSchema = z.object({
   ids: z.array(z.string().or(z.number())).min(1, 'Minimal satu ID harus dipilih')
@@ -36,6 +52,10 @@ const checkInventorySchema = z.object({
 const assignCubicleSchema = z.object({
   item_id: z.string().min(1, 'ID item wajib diisi'),
   cubicle_id: z.string().optional().default('')
+});
+
+const categorySchema = z.object({
+  name: z.string().min(1, 'Nama kategori wajib diisi').max(50, 'Nama kategori maksimal 50 karakter').trim()
 });
 
 const cubiclePositionSchema = z.object({
@@ -75,6 +95,7 @@ module.exports = {
   bulkDeleteSchema,
   checkInventorySchema,
   assignCubicleSchema,
+  categorySchema,
   cubiclePositionSchema,
   cubiclePositionsBulkSchema,
   handoverSchema

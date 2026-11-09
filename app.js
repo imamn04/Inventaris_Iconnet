@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Load data
+    loadCategories();
     loadCubiclePositions().finally(() => {
         loadInventory();
     });
@@ -1191,12 +1192,130 @@ function updateInventoryTable() {
 }
 
 // ========================================
+// CATEGORIES MANAGEMENT (DATABASE SYNC)
+// ========================================
+let categoriesData = [];
+
+async function loadCategories() {
+    try {
+        const res = await fetch('/api/categories');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.categories)) {
+            categoriesData = data.categories.map(c => c.name);
+        } else {
+            categoriesData = ['Monitor', 'Laptop', 'Keyboard', 'Mouse', 'Headset', 'PC', 'TV'];
+        }
+    } catch (err) {
+        console.error('Failed to load categories:', err);
+        categoriesData = ['Monitor', 'Laptop', 'Keyboard', 'Mouse', 'Headset', 'PC', 'TV'];
+    }
+    renderCategoryOptions();
+}
+
+function renderCategoryOptions() {
+    const itemNameSelect = document.getElementById('itemName');
+    const exportFilterSelect = document.getElementById('exportFilter');
+    const editItemNameSelect = document.getElementById('editItemName');
+
+    // 1. Form Tambah Inventaris
+    if (itemNameSelect) {
+        const currentVal = itemNameSelect.value;
+        itemNameSelect.innerHTML = `
+            <option value="">Pilih Kategori</option>
+            ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
+            <option value="__custom__" style="color: var(--primary); font-weight: 600;">+ Tambah Kategori Baru...</option>
+        `;
+        if (currentVal && categoriesData.includes(currentVal)) {
+            itemNameSelect.value = currentVal;
+        }
+    }
+
+    // 2. Filter Table Inventaris (Ambil Data Kategori dari Database)
+    if (exportFilterSelect) {
+        const currentFilter = exportFilterSelect.value;
+        exportFilterSelect.innerHTML = `
+            <option value="all">Semua Data</option>
+            ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
+        `;
+        if (currentFilter && (currentFilter === 'all' || categoriesData.includes(currentFilter))) {
+            exportFilterSelect.value = currentFilter;
+        }
+    }
+
+    // 3. Edit Form
+    if (editItemNameSelect) {
+        const currentEditVal = editItemNameSelect.value;
+        editItemNameSelect.innerHTML = `
+            <option value="">Pilih Nama Barang</option>
+            ${categoriesData.map(c => `<option value="${c}">${c}</option>`).join('')}
+        `;
+        if (currentEditVal) {
+            editItemNameSelect.value = currentEditVal;
+        }
+    }
+}
+
+function openAddCategoryModal() {
+    const input = document.getElementById('newCategoryInput');
+    if (input) input.value = '';
+    openModal('addCategoryModal');
+    setTimeout(() => { if (input) input.focus(); }, 150);
+}
+
+async function submitNewCategory() {
+    const input = document.getElementById('newCategoryInput');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) {
+        showToast('Nama kategori tidak boleh kosong!', true);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (data.success && data.category) {
+            showToast(`Kategori "${data.category.name}" berhasil disimpan ke database!`);
+            closeModal('addCategoryModal');
+            await loadCategories();
+
+            // Auto select newly created category in form
+            const itemNameSelect = document.getElementById('itemName');
+            if (itemNameSelect) {
+                itemNameSelect.value = data.category.name;
+                handleNewItemCategoryChange();
+                updateLiveAssetPreview();
+            }
+        } else {
+            showToast(data.message || 'Gagal menambahkan kategori', true);
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menambahkan kategori!', true);
+    }
+}
+
+window.openAddCategoryModal = openAddCategoryModal;
+window.submitNewCategory = submitNewCategory;
+window.loadCategories = loadCategories;
+
+// ========================================
 // INPUT INVENTORY
 // ========================================
 function handleNewItemCategoryChange() {
     const itemSelect = document.getElementById('itemName');
     const snConverterRow = document.getElementById('snConverterRow');
     if (!itemSelect) return;
+
+    if (itemSelect.value === '__custom__') {
+        itemSelect.value = '';
+        openAddCategoryModal();
+        return;
+    }
 
     if (itemSelect.value === 'Headset') {
         if (snConverterRow) snConverterRow.style.display = 'flex';
@@ -5793,6 +5912,7 @@ function openAssignFromDetail() {
 
 // Helper for icons
 function getItemIcon(name) {
+    if (!name) return 'fa-box';
     const n = name.toLowerCase();
     if (n.includes('monitor')) return 'fa-desktop';
     if (n.includes('laptop')) return 'fa-laptop';
@@ -5801,6 +5921,11 @@ function getItemIcon(name) {
     if (n.includes('headset')) return 'fa-headset';
     if (n.includes('pc')) return 'fa-server';
     if (n.includes('tv')) return 'fa-tv';
+    if (n.includes('print')) return 'fa-print';
+    if (n.includes('switch') || n.includes('router') || n.includes('network')) return 'fa-network-wired';
+    if (n.includes('server')) return 'fa-server';
+    if (n.includes('phone') || n.includes('telepon')) return 'fa-phone-alt';
+    if (n.includes('camera') || n.includes('kamera') || n.includes('cctv')) return 'fa-video';
     return 'fa-box';
 }
 

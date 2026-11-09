@@ -725,6 +725,18 @@ ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
 
 
+CREATE TABLE IF NOT EXISTS public.categories (
+    id SERIAL PRIMARY KEY,
+    name text NOT NULL UNIQUE,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.categories OWNER TO postgres;
+
+INSERT INTO public.categories (name) VALUES 
+('Monitor'), ('Laptop'), ('Keyboard'), ('Mouse'), ('Headset'), ('PC'), ('TV'), ('Printer')
+ON CONFLICT (name) DO NOTHING;
+
 -- Completed on 2026-04-30 17:02:56
 
 --

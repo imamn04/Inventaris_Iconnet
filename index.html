@@ -481,7 +481,12 @@
                                     <!-- Baris 1: Kategori & Merk -->
                                     <div class="compact-form-row">
                                         <div class="compact-field">
-                                            <label><i class="fas fa-tags"></i> Nama Barang / Kategori <span class="required">*</span></label>
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                <label style="margin: 0;"><i class="fas fa-tags"></i> Nama Barang / Kategori <span class="required">*</span></label>
+                                                <button type="button" onclick="openAddCategoryModal()" style="background: none; border: none; color: var(--primary); font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 0;">
+                                                    <i class="fas fa-plus-circle"></i> + Custom Kategori
+                                                </button>
+                                            </div>
                                             <select id="itemName" required onchange="handleNewItemCategoryChange()">
                                                 <option value="">Pilih Kategori</option>
                                                 <option value="Monitor">Monitor</option>
@@ -491,6 +496,7 @@
                                                 <option value="Headset">Headset</option>
                                                 <option value="PC">PC</option>
                                                 <option value="TV">TV</option>
+                                                <option value="__custom__" style="color: var(--primary); font-weight: 600;">+ Tambah Kategori Baru...</option>
                                             </select>
                                         </div>
                                         <div class="compact-field">
@@ -1516,6 +1522,31 @@
                         style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                         <button type="button" class="modal-btn cancel" onclick="closeModal('editModal')">Batal</button>
                         <button type="button" class="modal-btn save" onclick="saveEdit()">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div class="modal-overlay" id="addCategoryModal">
+        <div class="modal" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder-plus" style="color: var(--primary); margin-right: 8px;"></i> Tambah Kategori Baru</h3>
+                <button class="modal-close" onclick="closeModal('addCategoryModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addCategoryForm" onsubmit="event.preventDefault(); submitNewCategory();">
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label>Nama Kategori <span class="required">*</span></label>
+                        <input type="text" id="newCategoryInput" placeholder="Contoh: Printer, Switch, Server, Router..." required autocomplete="off">
+                        <small style="color: var(--text-tertiary); font-size: 11px; margin-top: 6px; display: block;">
+                            <i class="fas fa-info-circle"></i> Kategori akan disimpan ke database & langsung tersedia di semua filter dan formulir.
+                        </small>
+                    </div>
+                    <div class="form-actions" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button type="button" class="modal-btn cancel" onclick="closeModal('addCategoryModal')">Batal</button>
+                        <button type="submit" class="modal-btn save"><i class="fas fa-save"></i> Simpan Kategori</button>
                     </div>
                 </form>
             </div>

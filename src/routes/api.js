@@ -10,6 +10,7 @@ const {
   bulkDeleteSchema,
   checkInventorySchema,
   assignCubicleSchema,
+  categorySchema,
   cubiclePositionsBulkSchema,
   handoverSchema
 } = require('../validators');
@@ -20,9 +21,15 @@ const cubicleController = require('../controllers/cubicleController');
 const handoverController = require('../controllers/handoverController');
 const historyController = require('../controllers/historyController');
 const statsController = require('../controllers/statsController');
+const categoryController = require('../controllers/categoryController');
 
 // Auth
 router.post('/login', loginLimiter, validate(loginSchema), authController.login);
+
+// Categories
+router.get('/categories', categoryController.getAll);
+router.post('/categories', validate(categorySchema), categoryController.create);
+router.delete('/categories/:id', categoryController.remove);
 
 // Inventory
 router.get('/inventory', inventoryController.getAll);

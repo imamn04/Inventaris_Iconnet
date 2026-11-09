@@ -121,6 +121,17 @@ async function createInventoryItem(data) {
   });
 
   const mapped = mapInventory(created);
+  if (data.name && data.name.trim()) {
+    try {
+      const catName = data.name.trim();
+      const existing = await prisma.category.findFirst({
+        where: { name: { equals: catName, mode: 'insensitive' } }
+      });
+      if (!existing) {
+        await prisma.category.create({ data: { name: catName } });
+      }
+    } catch (_) {}
+  }
   await logHistory('CREATE', mapped, `Menambahkan item baru: ${mapped.name} (${mapped.id})`);
   return mapped;
 }
