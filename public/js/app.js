@@ -2607,12 +2607,6 @@ function preprocessImageFile(file, maxDim = 1200) {
 }
 
 function setupScannerControls() {
-    const photoScanBtn = document.getElementById('photoScanBtn');
-    const galleryScanBtn = document.getElementById('galleryScanBtn');
-    const btnCapturePhotoFallback = document.getElementById('btnCapturePhotoFallback');
-    const scanCameraInput = document.getElementById('scanCameraInput');
-    const scanGalleryInput = document.getElementById('scanGalleryInput');
-    const scanFileInput = document.getElementById('scanFileInput');
     const cameraSelect = document.getElementById('cameraSelect');
     const switchCameraBtn = document.getElementById('switchCameraBtn');
 
@@ -2625,42 +2619,11 @@ function setupScannerControls() {
                           window.location.hostname !== '127.0.0.1';
         if (isHttpLan) {
             httpsNotice.style.display = 'block';
-            httpsSwitchLink.href = `https://${window.location.hostname}:3443/index.html#scanPage`;
+            httpsSwitchLink.href = `https://${window.location.hostname}:3443/index.html#scan`;
         } else {
             httpsNotice.style.display = 'none';
         }
     }
-
-    if (photoScanBtn && !photoScanBtn.dataset.bound) {
-        photoScanBtn.dataset.bound = 'true';
-        photoScanBtn.addEventListener('click', triggerCameraPhotoScan);
-    }
-
-    if (galleryScanBtn && !galleryScanBtn.dataset.bound) {
-        galleryScanBtn.dataset.bound = 'true';
-        galleryScanBtn.addEventListener('click', triggerGalleryScan);
-    }
-
-    if (btnCapturePhotoFallback && !btnCapturePhotoFallback.dataset.bound) {
-        btnCapturePhotoFallback.dataset.bound = 'true';
-        btnCapturePhotoFallback.addEventListener('click', triggerCameraPhotoScan);
-    }
-
-    function bindFileInput(inputEl) {
-        if (inputEl && !inputEl.dataset.bound) {
-            inputEl.dataset.bound = 'true';
-            inputEl.addEventListener('change', function(e) {
-                if (e.target.files && e.target.files[0]) {
-                    handleScanFile(e.target.files[0]);
-                    e.target.value = '';
-                }
-            });
-        }
-    }
-
-    bindFileInput(scanCameraInput);
-    bindFileInput(scanGalleryInput);
-    bindFileInput(scanFileInput);
 
     if (switchCameraBtn && !switchCameraBtn.dataset.bound) {
         switchCameraBtn.dataset.bound = 'true';
@@ -2786,7 +2749,7 @@ async function startCamera(preferredCameraId = null) {
             httpsNotice.style.display = 'block';
             httpsNotice.scrollIntoView({ behavior: 'smooth' });
         }
-        showToast('Scan kamera live di HP memerlukan HTTPS. Klik tombol "Buka HTTPS" di atas atau gunakan Ambil Foto.', true, 5000);
+        showToast('Scan kamera live di HP memerlukan HTTPS. Silakan klik tombol "Buka HTTPS" di atas.', true, 5000);
         return;
     }
 
@@ -2854,7 +2817,7 @@ async function startCamera(preferredCameraId = null) {
             try { await html5QrcodeScanner.clear(); } catch(e) {}
             html5QrcodeScanner = null;
         }
-        showToast('Kamera terkendala izin akses. Pastikan izinkan kamera atau gunakan tombol Ambil Foto Barcode.', true, 4500);
+        showToast('Kamera tidak terdeteksi atau izin akses ditolak. Pastikan izin kamera aktif.', true, 4500);
     }
 }
 
