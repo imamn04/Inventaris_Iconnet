@@ -1,22 +1,21 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: iconnet_mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: iconnet_postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-IconnetRoot2026!}
-      MYSQL_DATABASE: inventaris_iconnet
-      MYSQL_USER: ${MYSQL_USER:-iconnet_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-IconnetPass2026!}
+      POSTGRES_DB: inventaris_iconnet
+      POSTGRES_USER: ${POSTGRES_USER:-iconnet_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-IconnetPass2026!}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      - postgres_data:/var/lib/postgresql/data
+      - ./iventaris_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-IconnetRoot2026!}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-iconnet_user} -d inventaris_iconnet"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +31,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: "mysql://${MYSQL_USER:-iconnet_user}:${MYSQL_PASSWORD:-IconnetPass2026!}@mysql:3306/inventaris_iconnet"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-iconnet_user}:${POSTGRES_PASSWORD:-IconnetPass2026!}@postgres:5432/inventaris_iconnet?schema=public"
       CORS_ORIGIN: "*"
       JWT_SECRET: ${JWT_SECRET:-iconnet_inventory_jwt_secret_key_2026_prod}
     command: sh -c "npx prisma db push --skip-generate && node server.js"
@@ -41,7 +40,7 @@ services:
     volumes:
       - barcode_storage:/app/barcode
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     networks:
       - iconnet_network
@@ -67,7 +66,7 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
+  postgres_data:
     driver: local
   barcode_storage:
     driver: local

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -33,7 +33,7 @@ model Inventory {
   catatan       String?   @db.Text
   tanggalMasuk  DateTime? @map("tanggal_masuk") @db.Date
   date          DateTime? @db.Date
-  qrCode        String?   @map("qr_code") @db.LongText
+  qrCode        String?   @map("qr_code") @db.Text
   cubicleId     String?   @map("cubicle_id") @db.VarChar(100)
   checkTime     DateTime? @map("check_time")
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -70,7 +70,7 @@ model Handover {
   lokasiBaru         String?   @map("lokasi_baru") @db.VarChar(255)
   catatan            String?   @db.Text
   noBeritaAcara      String?   @map("no_berita_acara") @db.VarChar(100)
-  signature          String?   @db.LongText
+  signature          String?   @db.Text
   timestamp          DateTime  @default(now())
 
   @@map("handover")

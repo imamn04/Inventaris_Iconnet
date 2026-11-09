@@ -51,7 +51,7 @@ async function startServer() {
   try {
     // Test Prisma Connection
     await prisma.$connect();
-    console.log('[Database] Connected to MySQL successfully via Prisma ORM.');
+    console.log('[Database] Connected to PostgreSQL successfully via Prisma ORM.');
 
     // Seed default admin if user table empty
     try {
