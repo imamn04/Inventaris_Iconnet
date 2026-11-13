@@ -119,3 +119,17 @@ model Category {
 
   @@map("categories")
 }
+
+model NonInventory {
+  id           String    @id @default(uuid())
+  namaBarang   String    @map("nama_barang")
+  kategori     String?
+  jumlah       Int       @default(0)
+  satuan       String    @default("Pcs")
+  lokasi       String?
+  keterangan   String?
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("non_inventory")
+}
