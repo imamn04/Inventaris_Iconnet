@@ -12,6 +12,7 @@ async function login(req, res, next) {
     return res.json({
       success: true,
       message: 'Login successful',
+      token: result.token,
       user: result.user
     });
   } catch (err) {

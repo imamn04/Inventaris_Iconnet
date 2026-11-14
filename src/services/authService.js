@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const bcrypt = require('bcryptjs');
+const { signToken } = require('../utils/token');
 
 async function loginUser(username, password) {
   const user = await prisma.user.findUnique({
@@ -31,14 +32,19 @@ async function loginUser(username, password) {
     return { success: false, message: 'Username atau password tidak valid' };
   }
 
+  const payload = {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: 'admin'
+  };
+
+  const token = signToken(payload);
+
   return {
     success: true,
-    user: {
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      role: 'admin'
-    }
+    token,
+    user: payload
   };
 }
 

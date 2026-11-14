@@ -21,8 +21,8 @@ app.use(helmetMiddleware);
 app.use(corsMiddleware);
 
 // Body Parser with payload limit
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
 // Storage Directory for generated barcodes
 const barcodeDir = path.join(__dirname, 'barcode');
@@ -31,9 +31,20 @@ if (!fs.existsSync(barcodeDir)) {
 }
 app.use('/barcode', express.static(barcodeDir));
 
+// Favicon Handler
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'img', 'logo1.png'));
+});
+
 // Serve Frontend Static Files from public directory (HTML, CSS, JS, Images)
 const publicDir = path.join(__dirname, 'public');
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  }
+}));
 
 // Root route redirect to login
 app.get('/', (req, res) => {
