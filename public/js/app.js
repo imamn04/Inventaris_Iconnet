@@ -1,4 +1,49 @@
 // ========================================
+// GLOBAL API FETCH INTERCEPTOR (AUTHENTICATION & RECOVERY)
+// ========================================
+(function () {
+    const originalFetch = window.fetch;
+    window.fetch = async function (url, options = {}) {
+        options = options || {};
+        const urlStr = typeof url === 'string' ? url : (url && url.url ? url.url : '');
+
+        // Sisipkan Authorization Bearer Token untuk seluruh pemanggilan REST API lokal
+        if (urlStr.startsWith('/api/') && !urlStr.includes('/api/login')) {
+            const token = sessionStorage.getItem('authToken');
+            if (token) {
+                options.headers = options.headers || {};
+                if (options.headers instanceof Headers) {
+                    if (!options.headers.has('Authorization')) {
+                        options.headers.set('Authorization', `Bearer ${token}`);
+                    }
+                } else if (Array.isArray(options.headers)) {
+                    options.headers.push(['Authorization', `Bearer ${token}`]);
+                } else {
+                    if (!options.headers['Authorization']) {
+                        options.headers['Authorization'] = `Bearer ${token}`;
+                    }
+                }
+            }
+        }
+
+        const response = await originalFetch(url, options);
+
+        // Auto-redirect jika token kedaluwarsa atau akses tidak sah (401)
+        if (response.status === 401 && urlStr.startsWith('/api/') && !urlStr.includes('/api/login')) {
+            console.warn('[Security] Sesi login tidak valid atau kedaluwarsa (401). Mengarahkan ke login...');
+            sessionStorage.removeItem('isLoggedIn');
+            sessionStorage.removeItem('user');
+            sessionStorage.removeItem('authToken');
+            if (!window.location.pathname.endsWith('login.html')) {
+                window.location.href = 'login.html';
+            }
+        }
+
+        return response;
+    };
+})();
+
+// ========================================
 // GLOBAL VARIABLES
 // ========================================
 let inventoryData = [];
@@ -12,9 +57,13 @@ let signaturePad, inventoryDistChart, conditionChart;
 // INITIALIZATION
 // ========================================
 document.addEventListener('DOMContentLoaded', function () {
-    // Check if user is logged in
+    // Check if user is logged in & has valid auth token
     const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-    if (!isLoggedIn) {
+    const authToken = sessionStorage.getItem('authToken');
+    if (!isLoggedIn || !authToken) {
+        sessionStorage.removeItem('isLoggedIn');
+        sessionStorage.removeItem('user');
+        sessionStorage.removeItem('authToken');
         window.location.href = 'login.html';
         return;
     }
@@ -109,10 +158,68 @@ function getStatusBadgeClass(status) {
     return s.replace(/\s+/g, '_');
 }
 
+const CATEGORY_COLOR_PALETTES = [
+    { name: 'blue', light: { bg: 'rgba(37, 99, 235, 0.12)', color: '#2563eb', border: 'rgba(37, 99, 235, 0.25)' }, dark: { bg: 'rgba(59, 130, 246, 0.18)', color: '#60a5fa', border: 'rgba(96, 165, 250, 0.3)' } },
+    { name: 'emerald', light: { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.25)' }, dark: { bg: 'rgba(52, 211, 153, 0.18)', color: '#34d399', border: 'rgba(52, 211, 153, 0.3)' } },
+    { name: 'purple', light: { bg: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', border: 'rgba(139, 92, 246, 0.25)' }, dark: { bg: 'rgba(167, 139, 250, 0.18)', color: '#c4b5fd', border: 'rgba(196, 181, 253, 0.3)' } },
+    { name: 'cyan', light: { bg: 'rgba(6, 182, 212, 0.12)', color: '#0891b2', border: 'rgba(6, 182, 212, 0.25)' }, dark: { bg: 'rgba(34, 211, 238, 0.18)', color: '#38bdf8', border: 'rgba(56, 189, 248, 0.3)' } },
+    { name: 'pink', light: { bg: 'rgba(236, 72, 153, 0.12)', color: '#db2777', border: 'rgba(236, 72, 153, 0.25)' }, dark: { bg: 'rgba(244, 114, 182, 0.18)', color: '#f472b6', border: 'rgba(244, 114, 182, 0.3)' } },
+    { name: 'amber', light: { bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: 'rgba(245, 158, 11, 0.25)' }, dark: { bg: 'rgba(251, 191, 36, 0.18)', color: '#fbbf24', border: 'rgba(251, 191, 36, 0.3)' } },
+    { name: 'indigo', light: { bg: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5', border: 'rgba(99, 102, 241, 0.25)' }, dark: { bg: 'rgba(129, 140, 248, 0.18)', color: '#a5b4fc', border: 'rgba(165, 180, 252, 0.3)' } },
+    { name: 'teal', light: { bg: 'rgba(20, 184, 166, 0.12)', color: '#0d9488', border: 'rgba(20, 184, 166, 0.25)' }, dark: { bg: 'rgba(45, 212, 191, 0.18)', color: '#2dd4bf', border: 'rgba(45, 212, 191, 0.3)' } },
+    { name: 'sky', light: { bg: 'rgba(14, 165, 233, 0.12)', color: '#0284c7', border: 'rgba(14, 165, 233, 0.25)' }, dark: { bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc', border: 'rgba(125, 211, 252, 0.3)' } },
+    { name: 'coral', light: { bg: 'rgba(249, 115, 22, 0.12)', color: '#ea580c', border: 'rgba(249, 115, 22, 0.25)' }, dark: { bg: 'rgba(251, 146, 60, 0.18)', color: '#fb923c', border: 'rgba(251, 146, 60, 0.3)' } },
+    { name: 'fuchsia', light: { bg: 'rgba(217, 70, 239, 0.12)', color: '#c026d3', border: 'rgba(217, 70, 239, 0.25)' }, dark: { bg: 'rgba(232, 121, 249, 0.18)', color: '#e879f9', border: 'rgba(232, 121, 249, 0.3)' } },
+    { name: 'lime', light: { bg: 'rgba(132, 204, 22, 0.12)', color: '#65a30d', border: 'rgba(132, 204, 22, 0.25)' }, dark: { bg: 'rgba(163, 230, 53, 0.18)', color: '#bef264', border: 'rgba(190, 242, 100, 0.3)' } }
+];
+
+function getCategoryBadgeStyle(categoryName) {
+    if (!categoryName) return null;
+    const cat = categoryName.toString().trim().toLowerCase();
+
+    if (cat.includes('laptop')) return CATEGORY_COLOR_PALETTES[0]; // blue
+    if (cat.includes('monitor')) return CATEGORY_COLOR_PALETTES[1]; // emerald
+    if (cat.includes('keyboard')) return CATEGORY_COLOR_PALETTES[2]; // purple
+    if (cat.includes('mouse')) return CATEGORY_COLOR_PALETTES[3]; // cyan
+    if (cat.includes('headset')) return CATEGORY_COLOR_PALETTES[4]; // pink
+    if (cat.includes('tv') || cat.includes('televisi')) return CATEGORY_COLOR_PALETTES[5]; // amber
+    if (cat.includes('pc') || cat.includes('komputer')) return CATEGORY_COLOR_PALETTES[6]; // indigo
+    if (cat.includes('printer') || cat.includes('scanner')) return CATEGORY_COLOR_PALETTES[7]; // teal
+    if (cat.includes('ac') || cat.includes('cooler')) return CATEGORY_COLOR_PALETTES[8]; // sky
+    if (cat.includes('switch') || cat.includes('router') || cat.includes('hub')) return CATEGORY_COLOR_PALETTES[9]; // coral
+    if (cat.includes('server') || cat.includes('storage')) return CATEGORY_COLOR_PALETTES[10]; // fuchsia
+    if (cat.includes('ups') || cat.includes('genset') || cat.includes('kabel')) return CATEGORY_COLOR_PALETTES[11]; // lime
+
+    // Deterministic string hash for unknown/custom new categories
+    let hash = 0;
+    for (let i = 0; i < cat.length; i++) {
+        hash = cat.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % CATEGORY_COLOR_PALETTES.length;
+    return CATEGORY_COLOR_PALETTES[index];
+}
+
 function getCategoryBadgeClass(category) {
     if (!category) return 'none';
-    return category.toString().toLowerCase().trim();
+    return category.toString().toLowerCase().replace(/[^a-z0-9]/g, '-').trim();
 }
+
+function getCategoryBadgeHtml(categoryName, extraClass = '') {
+    const rawName = categoryName || '-';
+    if (!categoryName) {
+        return `<span class="category-badge none ${extraClass}">-</span>`;
+    }
+    const cleanClass = getCategoryBadgeClass(categoryName);
+    const styleObj = getCategoryBadgeStyle(categoryName);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.classList.contains('dark-theme');
+    const themeStyle = styleObj ? (isDark ? styleObj.dark : styleObj.light) : null;
+    const inlineStyle = themeStyle ? `style="background: ${themeStyle.bg}; color: ${themeStyle.color}; border: 1px solid ${themeStyle.border};"` : '';
+
+    return `<span class="category-badge ${cleanClass} ${extraClass}" ${inlineStyle}>${rawName}</span>`;
+}
+window.getCategoryBadgeStyle = getCategoryBadgeStyle;
+window.getCategoryBadgeClass = getCategoryBadgeClass;
+window.getCategoryBadgeHtml = getCategoryBadgeHtml;
 
 // ========================================
 // ACTION BUTTON EVENT LISTENERS (Event Delegation)
@@ -255,6 +362,29 @@ function setupEventListeners() {
         document.getElementById('sidebarOverlay').classList.toggle('show');
     });
 
+    // Mobile Bottom Navigation Bar buttons
+    document.querySelectorAll('.mobile-nav-item[data-page]').forEach(btn => {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const targetPage = this.getAttribute('data-page');
+            if (targetPage) {
+                navigateTo(targetPage);
+                if (navigator.vibrate) navigator.vibrate(20);
+            }
+        });
+    });
+
+    const mobileMoreBtn = document.getElementById('mobileMoreBtn');
+    if (mobileMoreBtn) {
+        mobileMoreBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('sidebar').classList.toggle('active');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+            if (navigator.vibrate) navigator.vibrate(20);
+        });
+    }
+
     document.getElementById('sidebarOverlay').addEventListener('click', function () {
         document.getElementById('sidebar').classList.remove('active');
         this.classList.remove('show');
@@ -381,6 +511,7 @@ function setupEventListeners() {
     // Set today's date
     document.getElementById('itemDate').valueAsDate = new Date();
     document.getElementById('handoverTanggal').valueAsDate = new Date();
+    if (typeof renderBASTChecklistChips === 'function') renderBASTChecklistChips();
 
     // Handover search and filter listeners
     const handoverSearchInput = document.getElementById('handoverSearchInput');
@@ -419,6 +550,23 @@ function setupEventListeners() {
         }
     });
 
+    // Show/hide SN Converter in Edit Modal
+    const editItemNameElem = document.getElementById('editItemName');
+    if (editItemNameElem) {
+        editItemNameElem.addEventListener('change', function () {
+            const snConvRow = document.getElementById('editSnConverterRow');
+            if (snConvRow) {
+                if (this.value === 'Headset') {
+                    snConvRow.style.display = 'flex';
+                } else {
+                    snConvRow.style.display = 'none';
+                    const editSnConvInput = document.getElementById('editSnConverter');
+                    if (editSnConvInput) editSnConvInput.value = '';
+                }
+            }
+        });
+    }
+
     // Close modal when clicking outside
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', function (e) {
@@ -436,6 +584,7 @@ function logout() {
     sessionStorage.removeItem('isLoggedIn');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('activePage');
+    sessionStorage.removeItem('authToken');
     window.location.href = 'login.html';
 }
 
@@ -443,65 +592,125 @@ function logout() {
 // NAVIGATION
 // ========================================
 // ========================================
-// DASHBOARD FUNCTIONS
+// DASHBOARD FUNCTIONS (SMART DYNAMIC CATEGORY MONITORING)
 // ========================================
+function getDashboardCategoryStyle(catName) {
+    const low = (catName || '').toLowerCase().trim();
+    if (low.includes('monitor') || low.includes('layar')) {
+        return { icon: 'fa-desktop', cssClass: 'monitor', gradient: 'linear-gradient(135deg, #10b981, #34d399)' };
+    }
+    if (low.includes('keyboard')) {
+        return { icon: 'fa-keyboard', cssClass: 'keyboard', gradient: 'linear-gradient(135deg, #8b5cf6, #a855f7)' };
+    }
+    if (low.includes('mouse')) {
+        return { icon: 'fa-mouse', cssClass: 'mouse', gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee)' };
+    }
+    if (low.includes('headset') || low.includes('headphone')) {
+        return { icon: 'fa-headset', cssClass: 'headset', gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)' };
+    }
+    if (low.includes('laptop')) {
+        return { icon: 'fa-laptop', cssClass: 'laptop', gradient: 'linear-gradient(135deg, #6366f1, #818cf8)' };
+    }
+    if (low.includes('pc') || low.includes('cpu') || low.includes('komputer')) {
+        return { icon: 'fa-server', cssClass: 'pc', gradient: 'linear-gradient(135deg, #334155, #475569)' };
+    }
+    if (low.includes('tv') || low.includes('televisi')) {
+        return { icon: 'fa-tv', cssClass: 'tv', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' };
+    }
+    // SMART MATCHING UNTUK KATEGORI FASILITAS / HARDWARE BARU:
+    if (low.includes('ac') || low.includes('air conditioner') || low.includes('pendingin')) {
+        return { icon: 'fa-snowflake', cssClass: 'ac', gradient: 'linear-gradient(135deg, #0284c7, #38bdf8)' };
+    }
+    if (low.includes('print') || low.includes('scanner')) {
+        return { icon: 'fa-print', cssClass: 'printer', gradient: 'linear-gradient(135deg, #059669, #34d399)' };
+    }
+    if (low.includes('router') || low.includes('switch') || low.includes('network') || low.includes('hub') || low.includes('mikrotik')) {
+        return { icon: 'fa-network-wired', cssClass: 'network', gradient: 'linear-gradient(135deg, #d97706, #f59e0b)' };
+    }
+    if (low.includes('cctv') || low.includes('kamera') || low.includes('cam')) {
+        return { icon: 'fa-video', cssClass: 'cctv', gradient: 'linear-gradient(135deg, #e11d48, #fb7185)' };
+    }
+    if (low.includes('proyektor') || low.includes('projector')) {
+        return { icon: 'fa-film', cssClass: 'projector', gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)' };
+    }
+    if (low.includes('server')) {
+        return { icon: 'fa-database', cssClass: 'server', gradient: 'linear-gradient(135deg, #1e293b, #3b82f6)' };
+    }
+    if (low.includes('ups') || low.includes('genset') || low.includes('listrik') || low.includes('power')) {
+        return { icon: 'fa-bolt', cssClass: 'power', gradient: 'linear-gradient(135deg, #ca8a04, #eab308)' };
+    }
+    if (low.includes('meja') || low.includes('kursi') || low.includes('lemari') || low.includes('furniture')) {
+        return { icon: 'fa-couch', cssClass: 'furniture', gradient: 'linear-gradient(135deg, #9a3412, #c2410c)' };
+    }
+    return { icon: 'fa-cube', cssClass: 'custom', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' };
+}
+
+function filterAndNavigateCategory(catName) {
+    if (typeof navigateTo === 'function') {
+        navigateTo('inventory');
+    }
+    const exportFilter = document.getElementById('exportFilter');
+    if (exportFilter) {
+        exportFilter.value = catName;
+        if (typeof currentPage !== 'undefined') currentPage = 1;
+        if (typeof updateInventoryTable === 'function') {
+            updateInventoryTable();
+        }
+    }
+}
+window.filterAndNavigateCategory = filterAndNavigateCategory;
+window.getDashboardCategoryStyle = getDashboardCategoryStyle;
+
 function updateDashboard() {
     console.log('Updating Dashboard with', inventoryData.length, 'items');
 
-    // Helper to count items by name (very robust matching)
-    const countItem = (keyword) => {
-        return inventoryData.filter(item => {
-            // Check multiple possible property names (name, nama_barang, item_name)
-            const itemName = item.name || item.nama_barang || item.item_name;
-            if (!itemName) return false;
-
-            const name = itemName.toString().toLowerCase().trim();
-            const key = keyword.toLowerCase().trim();
-            return name.includes(key);
-        }).length;
-    };
-
-    // Basic Stats
     const totalItems = inventoryData.length;
-    const monitors = countItem('Monitor');
-    const laptops = countItem('Laptop');
-    const pcs = countItem('PC');
-    const keyboards = countItem('Keyboard');
-    const mice = countItem('Mouse');
-    const headsets = countItem('Headset');
-    const tvs = countItem('TV');
 
-    console.log('Stats calculated:', { monitors, laptops, pcs, keyboards, mice, headsets, tvs });
+    // Kumpulkan seluruh kategori: 7 kategori utama + kategori dari master + kategori yang ada di inventaris
+    const defaultOrder = ['Monitor', 'Keyboard', 'Mouse', 'Headset', 'Laptop', 'PC', 'TV'];
+    const allCategoriesSet = new Set(defaultOrder);
 
-    if (document.getElementById('totalItems')) {
-        document.getElementById('totalItems').textContent = totalItems;
+    if (Array.isArray(categoriesData)) {
+        categoriesData.forEach(c => {
+            if (c && typeof c === 'string' && c.trim()) allCategoriesSet.add(c.trim());
+        });
     }
 
-    // Update all 7 dashboard cards
-    const dashStats = {
-        'totalMonitorsDashboard': monitors,
-        'totalKeyboardsDashboard': keyboards,
-        'totalMiceDashboard': mice,
-        'totalHeadsetsDashboard': headsets,
-        'totalLaptopsDashboard': laptops,
-        'totalPCsDashboard': pcs,
-        'totalTVsDashboard': tvs
-    };
+    if (Array.isArray(inventoryData)) {
+        inventoryData.forEach(item => {
+            const cat = item.name || item.nama_barang || item.item_name;
+            if (cat && typeof cat === 'string' && cat.trim()) allCategoriesSet.add(cat.trim());
+        });
+    }
 
-    Object.keys(dashStats).forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            // Use animation if available
-            if (typeof animateCountUp === 'function') {
-                animateCountUp(id, dashStats[id]);
-            } else {
-                el.textContent = dashStats[id];
-            }
-            // Force update opacity if it was hidden
-            const card = el.closest('.stat-card');
-            if (card) card.style.opacity = '1';
-        }
-    });
+    // Render Kartu Kategori Secara Dinamis
+    const gridContainer = document.getElementById('dashboardCategoryStatsGrid');
+    if (gridContainer) {
+        gridContainer.innerHTML = Array.from(allCategoriesSet).map(catName => {
+            const style = getDashboardCategoryStyle(catName);
+            const count = inventoryData.filter(item => {
+                const itemName = item.name || item.nama_barang || item.item_name;
+                if (!itemName) return false;
+                const n = itemName.toString().toLowerCase().trim();
+                const k = catName.toLowerCase().trim();
+                return n === k || n.includes(k) || k.includes(n);
+            }).length;
+
+            const safeId = `total_${catName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_Dashboard`;
+
+            return `
+                <div class="stat-card ${style.cssClass} premium-glow" 
+                     onclick="filterAndNavigateCategory('${escapeChecklistText(catName)}')" 
+                     title="Klik untuk filter data ${escapeChecklistText(catName)} di inventaris">
+                    <div class="icon" style="background: ${style.gradient}; color: #ffffff;">
+                        <i class="fas ${style.icon}"></i>
+                    </div>
+                    <div class="number gradient-text" id="${safeId}">${count}</div>
+                    <div class="label" title="${escapeChecklistText(catName)}">${escapeChecklistText(catName)}</div>
+                </div>
+            `;
+        }).join('');
+    }
 
     // Main total items animation
     if (document.getElementById('totalItems')) {
@@ -512,30 +721,48 @@ function updateDashboard() {
         }
     }
 
-    // Fallback for old IDs (also with animation)
+    // Operational Status Metrics (Digunakan, Ready Spare di Gudang, Rusak/Maintenance)
+    let inUseCount = 0;
+    let inStockCount = 0;
+    let damagedCount = 0;
+
+    inventoryData.forEach(item => {
+        const kondisi = (item.kondisi_after || item.kondisiAfter || item.kondisi || 'Baik').toString().toLowerCase();
+        const lokasi = (item.lokasi || item.location || '').toString().toLowerCase();
+        const isDamaged = kondisi.includes('rusak') || kondisi.includes('repair') || kondisi.includes('perbaikan');
+
+        if (isDamaged) {
+            damagedCount++;
+        } else if (lokasi.includes('gudang') || lokasi.includes('storage') || !lokasi || lokasi === '-') {
+            inStockCount++;
+        } else {
+            inUseCount++;
+        }
+    });
+
     if (typeof animateCountUp === 'function') {
-        if (document.getElementById('totalMonitors')) animateCountUp('totalMonitors', monitors);
-        if (document.getElementById('totalKeyboards')) animateCountUp('totalKeyboards', keyboards);
-        if (document.getElementById('totalMice')) animateCountUp('totalMice', mice);
+        animateCountUp('totalInUseDashboard', inUseCount);
+        animateCountUp('totalInStockDashboard', inStockCount);
+        animateCountUp('totalDamagedDashboard', damagedCount);
     } else {
-        if (document.getElementById('totalMonitors')) document.getElementById('totalMonitors').textContent = monitors;
-        if (document.getElementById('totalKeyboards')) document.getElementById('totalKeyboards').textContent = keyboards;
-        if (document.getElementById('totalMice')) document.getElementById('totalMice').textContent = mice;
+        if (document.getElementById('totalInUseDashboard')) document.getElementById('totalInUseDashboard').textContent = inUseCount;
+        if (document.getElementById('totalInStockDashboard')) document.getElementById('totalInStockDashboard').textContent = inStockCount;
+        if (document.getElementById('totalDamagedDashboard')) document.getElementById('totalDamagedDashboard').textContent = damagedCount;
     }
 
     // Occupancy Analytics (Idea 3)
     if (cubiclePositions && cubiclePositions.length > 0) {
-        const occupiedCount = cubiclePositions.filter(pos =>
-            inventoryData.some(inv => (inv.cubicle_id || inv.cubicleId) === pos.cubicle_id)
+        const validCubicles = cubiclePositions.filter(p => p.type !== 'label' && (!p.cubicle_id || !p.cubicle_id.startsWith('LABEL_')));
+        const occupiedCount = validCubicles.filter(pos =>
+            inventoryData.some(inv => getCubicleId(inv) === pos.cubicle_id)
         ).length;
-        const percent = Math.round((occupiedCount / cubiclePositions.length) * 100);
+        const totalValid = validCubicles.length || 1;
+        const percent = Math.round((occupiedCount / totalValid) * 100);
 
         const percentEl = document.getElementById('occupiedPercent');
         const barEl = document.getElementById('occupancyBar');
         if (percentEl) percentEl.textContent = `${percent}%`;
         if (barEl) barEl.style.width = `${percent}%`;
-
-        renderDashboardMap();
     }
 
     // Update Recent Activities
@@ -543,6 +770,120 @@ function updateDashboard() {
 
     // Update charts if available
     if (typeof updateChartsData === 'function') updateChartsData();
+
+    // Update Recent BAST & Low Stock Alerts
+    updateDashboardRecentBast();
+    checkDashboardLowStock();
+}
+
+async function updateDashboardRecentBast() {
+    const tbody = document.getElementById('recentBastTableBody');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch('/api/handover');
+        if (!res.ok) return;
+        const handovers = await res.json();
+        if (!Array.isArray(handovers) || handovers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 25px;"><i class="fas fa-inbox" style="font-size: 20px; display: block; margin-bottom: 6px;"></i>Belum ada dokumen Berita Acara yang diterbitkan</td></tr>';
+            return;
+        }
+
+        const recent = handovers.slice(0, 5);
+        tbody.innerHTML = recent.map(item => {
+            const noBA = item.no_berita_acara || item.noBeritaAcara || '-';
+            const jenis = item.jenis_transaksi || item.jenisTransaksi || 'Penyerahan';
+            const namaBarang = item.item_name || item.itemName || 'Perangkat IT';
+            const sn = item.item_sn || item.itemSn || '-';
+            const penyerah = item.pihak_penyerah || item.pihakPenyerah || '-';
+            const penerima = item.pihak_penerima || item.pihakPenerima || '-';
+            const lokasi = item.lokasi_baru || item.lokasiBaru || '-';
+            const tgl = item.tanggal_serah_terima || item.tanggalSerahTerima ? new Date(item.tanggal_serah_terima || item.tanggalSerahTerima).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+
+            const badgeColor = jenis.toLowerCase() === 'penyerahan' ? '#3b82f6' : '#10b981';
+
+            return `
+                <tr>
+                    <td>
+                        <strong style="color: var(--text-primary); font-family: monospace; font-size: 12.5px;">${noBA}</strong>
+                        <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
+                            <i class="fas fa-calendar-alt"></i> ${tgl}
+                        </div>
+                    </td>
+                    <td>
+                        <span style="display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600; background: ${badgeColor}20; color: ${badgeColor}; border: 1px solid ${badgeColor}40;">
+                            ${jenis}
+                        </span>
+                    </td>
+                    <td>
+                        <strong>${namaBarang}</strong>
+                        <div style="font-size: 11.5px; color: var(--text-secondary); font-family: monospace;">SN: ${sn}</div>
+                    </td>
+                    <td>
+                        <div style="font-size: 12.5px;">
+                            <span style="color: var(--text-secondary);">${penyerah}</span>
+                            <i class="fas fa-arrow-right" style="font-size: 10px; margin: 0 4px; color: var(--primary);"></i>
+                            <strong style="color: var(--text-primary);">${penerima}</strong>
+                        </div>
+                    </td>
+                    <td>
+                        <span style="font-size: 12px; color: var(--text-secondary);">
+                            <i class="fas fa-map-marker-alt" style="color: var(--primary); margin-right: 4px;"></i>${lokasi}
+                        </span>
+                    </td>
+                    <td style="text-align: center;">
+                        <a href="/api/handover/${item.id}/pdf?token=${encodeURIComponent(sessionStorage.getItem('authToken') || '')}" class="btn-bast-pdf-download" target="_blank" title="Unduh Dokumen PDF Resmi BAST">
+                            <i class="fas fa-file-pdf"></i> Unduh PDF
+                        </a>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Error loading recent BAST for dashboard:', e);
+    }
+}
+
+async function checkDashboardLowStock() {
+    const alertEl = document.getElementById('dashboardLowStockAlert');
+    const listEl = document.getElementById('lowStockItemsList');
+    if (!alertEl || !listEl) return;
+
+    try {
+        const res = await fetch('/api/non-inventory');
+        if (!res.ok) return;
+        const items = await res.json();
+        if (!Array.isArray(items)) return;
+
+        const lowItems = items.filter(it => (parseInt(it.jumlah, 10) || 0) <= 5);
+        if (lowItems.length > 0) {
+            alertEl.style.display = 'flex';
+            listEl.textContent = lowItems.map(it => `${it.namaBarang || it.nama_barang || 'Barang'} (sisa ${it.jumlah} ${it.satuan || 'pcs'})`).join(', ');
+        } else {
+            alertEl.style.display = 'none';
+        }
+    } catch (e) {
+        // silent
+    }
+}
+
+function filterAndNavigateInventory(mode) {
+    navigateTo('inventory');
+    const searchInput = document.getElementById('searchInput');
+    const exportFilter = document.getElementById('exportFilter');
+    if (!searchInput) return;
+
+    if (mode === 'in-stock') {
+        searchInput.value = 'Gudang';
+        filterInventory();
+    } else if (mode === 'maintenance') {
+        searchInput.value = 'Rusak';
+        filterInventory();
+    } else {
+        searchInput.value = '';
+        if (exportFilter) exportFilter.value = 'all';
+        filterInventory();
+    }
 }
 
 function updateRecentActivities() {
@@ -566,7 +907,7 @@ function updateRecentActivities() {
 
             return `
                 <tr>
-                    <td><span class="category-badge ${itemName.toLowerCase().replace(/\s+/g, '-')}">${itemName}</span></td>
+                    <td>${getCategoryBadgeHtml(itemName)}</td>
                     <td>${item.merk || '-'}</td>
                     <td><span class="barcode-display">${item.sn || '-'}</span></td>
                     <td>${item.lokasi || '-'}</td>
@@ -605,79 +946,395 @@ function getCubicleId(item) {
     return '';
 }
 
+// ==========================================================================
+// MODERN ENTERPRISE DASHBOARD FLOORPLAN ENGINE (Stop-Slop Suite)
+// ==========================================================================
+let dashboardMapState = {
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    isDragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    currentFilter: 'all',
+    currentZone: 'all',
+    hasUserInteracted: false,
+    stageBounds: { minX: 0, maxX: 1200, minY: 0, maxY: 1600 }
+};
+
 function renderDashboardMap() {
     const container = document.getElementById('dashboardMiniMap');
     if (!container) return;
 
-    container.innerHTML = '';
+    let stage = document.getElementById('dashboardMapStage');
+    if (!stage) {
+        stage = document.createElement('div');
+        stage.id = 'dashboardMapStage';
+        stage.className = 'map-stage';
+        stage.style.position = 'absolute';
+        stage.style.left = '0';
+        stage.style.top = '0';
+        stage.style.transformOrigin = '0 0';
+        container.appendChild(stage);
+    }
+    stage.innerHTML = '';
 
-    if (cubiclePositions.length === 0) {
-        container.innerHTML = '<div class="empty-state mini"><i class="fas fa-map-marker-alt"></i><p style="font-size: 10px;">Belum ada denah</p></div>';
+    const validPositions = (cubiclePositions || []).filter(p => (p.x > 0 || p.y > 0));
+
+    if (validPositions.length === 0) {
+        stage.innerHTML = `
+            <div class="empty-state mini" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;">
+                <i class="fas fa-map-marked-alt" style="font-size: 32px; color: var(--text-tertiary); margin-bottom: 8px;"></i>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Belum ada denah yang diletakkan di kanvas</p>
+                <a href="#map-designer" style="font-size: 11px; color: var(--primary); text-decoration: underline; margin-top: 4px; display: inline-block;">Atur Tata Letak di Designer</a>
+            </div>
+        `;
+        updateDashboardMapCounters(0, 0, 0, 0);
         return;
     }
 
-    cubiclePositions.forEach(pos => {
-        // NEW: Handle Labels on Dashboard (More robust detection)
-        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+    // Compute bounding box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    validPositions.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
 
+    dashboardMapState.stageBounds = { minX, maxX, minY, maxY };
+
+    // Group items by cluster/block for island pod cards
+    const clusterMap = {};
+    let totalOccupied = 0;
+    let totalVacant = 0;
+    let totalRooms = 0;
+    let totalAll = 0;
+
+    validPositions.forEach(pos => {
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        if (isLabel) return;
+
+        totalAll++;
+        const isRoom = pos.type === 'room' || (pos.cubicle_id && (pos.cubicle_id.toUpperCase().includes('LOBBY') || pos.cubicle_id.toUpperCase().includes('NOC') || pos.cubicle_id.toUpperCase().includes('SERVER') || pos.cubicle_id.toUpperCase().includes('MEETING')));
+        if (isRoom) {
+            totalRooms++;
+        }
+
+        const items = inventoryData.filter(inv => getCubicleId(inv) === pos.cubicle_id);
+        if (items.length > 0) totalOccupied++;
+        else if (!isRoom) totalVacant++;
+
+        // Cluster detection by prefix (e.g. A, B, C, D, E, F)
+        if (!isRoom) {
+            const block = (pos.cubicle_id.split('-')[0] || '').trim().toUpperCase();
+            if (block && block.length === 1 && block >= 'A' && block <= 'Z') {
+                if (!clusterMap[block]) clusterMap[block] = [];
+                clusterMap[block].push(pos);
+            }
+        }
+    });
+
+    updateDashboardMapCounters(totalAll, totalOccupied, totalVacant, totalRooms);
+
+    // 1. Render Cluster Pod Cards (Island Enclosures)
+    Object.keys(clusterMap).sort().forEach(block => {
+        const nodes = clusterMap[block];
+        if (nodes.length >= 2) {
+            let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMaxY = -Infinity;
+            nodes.forEach(n => {
+                if (n.x < bMinX) bMinX = n.x;
+                if (n.x > bMaxX) bMaxX = n.x;
+                if (n.y < bMinY) bMinY = n.y;
+                if (n.y > bMaxY) bMaxY = n.y;
+            });
+
+            const podCard = document.createElement('div');
+            podCard.className = `cluster-pod-card pod-block-${block}`;
+            podCard.style.left = `${bMinX - 16}px`;
+            podCard.style.top = `${bMinY - 26}px`;
+            podCard.style.width = `${(bMaxX - bMinX) + 84}px`;
+            podCard.style.height = `${(bMaxY - bMinY) + 88}px`;
+
+            podCard.innerHTML = `
+                <div class="pod-header">
+                    <span class="pod-dot"></span>
+                    <span>Kluster ${block}</span>
+                    <span class="pod-badge">(${nodes.length} Meja)</span>
+                </div>
+            `;
+            stage.appendChild(podCard);
+        }
+    });
+
+    // 2. Render Desks & Rooms
+    validPositions.forEach(pos => {
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
         if (isLabel) {
             const div = document.createElement('div');
             div.className = 'view-label mini';
             div.style.left = `${pos.x}px`;
             div.style.top = `${pos.y}px`;
-            div.style.fontSize = '8px';
-            div.style.padding = '2px 4px';
+            div.style.fontSize = '9px';
+            div.style.padding = '3px 8px';
+            div.style.borderRadius = '6px';
+            div.style.background = 'rgba(16, 185, 129, 0.12)';
+            div.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+            div.style.color = '#34d399';
+            div.style.fontWeight = '700';
+            div.style.zIndex = '3';
             div.textContent = pos.text || '';
-            container.appendChild(div);
+            stage.appendChild(div);
             return;
         }
 
         const items = inventoryData.filter(inv => getCubicleId(inv) === pos.cubicle_id);
         const isOccupied = items.length > 0;
+        const isRoom = pos.type === 'room' || (pos.cubicle_id && (pos.cubicle_id.toUpperCase().includes('LOBBY') || pos.cubicle_id.toUpperCase().includes('NOC') || pos.cubicle_id.toUpperCase().includes('SERVER') || pos.cubicle_id.toUpperCase().includes('MEETING')));
 
         const div = document.createElement('div');
-        div.className = `cubicle-view mini ${isOccupied ? 'occupied' : ''}`;
         div.setAttribute('data-id', pos.cubicle_id);
+        div.setAttribute('data-type', isRoom ? 'room' : 'cubicle');
+        div.setAttribute('data-occupied', isOccupied ? 'true' : 'false');
         div.style.left = `${pos.x}px`;
         div.style.top = `${pos.y}px`;
-        div.style.transform = 'scale(0.8)';
 
-        // Smart Icon logic
-        let iconClass = 'fa-plus';
-        if (isOccupied) {
-            const hasLaptop = items.some(i => (i.name || '').toLowerCase().includes('laptop'));
-            const hasPC = items.some(i => (i.name || '').toLowerCase().includes('pc') || (i.name || '').toLowerCase().includes('server'));
-            iconClass = hasLaptop ? 'fa-laptop' : (hasPC ? 'fa-server' : 'fa-desktop');
+        if (isRoom) {
+            div.className = `cubicle-view mini room-card ${isOccupied ? 'occupied' : ''}`;
+            let roomIcon = 'fa-building';
+            const upper = pos.cubicle_id.toUpperCase();
+            if (upper.includes('NOC')) roomIcon = 'fa-network-wired';
+            else if (upper.includes('SERVER')) roomIcon = 'fa-server';
+            else if (upper.includes('MEETING') || upper.includes('RAPAT')) roomIcon = 'fa-users';
+
+            div.innerHTML = `
+                <div class="room-header-wrap">
+                    <i class="fas ${roomIcon} room-icon"></i>
+                    <span class="room-title">${pos.cubicle_id}</span>
+                </div>
+                <span class="room-subtitle">${isOccupied ? `${items.length} Aset Terpasang` : 'Area Publik'}</span>
+                ${isOccupied ? `<span class="item-count-badge">${items.length}</span>` : ''}
+                <div class="cubicle-tooltip">
+                    <strong style="color: #34d399;">${pos.cubicle_id}</strong><br>
+                    <span style="font-size: 10px; color: #94a3b8;">${isOccupied ? `${items.length} Barang Terpasang` : 'Ruangan Khusus / Belum ada barang'}</span>
+                </div>
+            `;
+        } else {
+            div.className = `cubicle-view mini desk-node ${isOccupied ? 'occupied' : ''}`;
+
+            let iconClass = 'fa-plus';
+            if (isOccupied) {
+                const hasLaptop = items.some(i => (i.name || '').toLowerCase().includes('laptop'));
+                const hasPC = items.some(i => (i.name || '').toLowerCase().includes('pc') || (i.name || '').toLowerCase().includes('server'));
+                iconClass = hasLaptop ? 'fa-laptop' : (hasPC ? 'fa-server' : 'fa-desktop');
+            }
+
+            const itemsPreview = isOccupied ? items.slice(0, 2).map(i => `• ${i.name || 'Barang'}`).join('<br>') : '';
+            div.innerHTML = `
+                <span class="cubicle-id">${pos.cubicle_id}</span>
+                <i class="fas ${iconClass} cubicle-icon"></i>
+                ${isOccupied ? `<span class="item-count-badge">${items.length}</span>` : ''}
+                <div class="cubicle-tooltip">
+                    <strong>${pos.cubicle_id}</strong> • <span style="color: ${isOccupied ? '#60a5fa' : '#94a3b8'};">${isOccupied ? 'Terisi Aset' : 'Kosong'}</span><br>
+                    ${isOccupied ? `<div style="font-size: 10px; color: #cbd5e1; margin-top: 3px;">${itemsPreview}${items.length > 2 ? `<br>+${items.length - 2} lainnya` : ''}</div>` : '<span style="font-size: 10px; color: #94a3b8;">Klik untuk tambah/assign aset</span>'}
+                </div>
+            `;
         }
 
-        div.innerHTML = `
-            <span class="cubicle-id" style="font-size: 8px;">${pos.cubicle_id}</span>
-            <i class="fas ${iconClass} cubicle-icon" style="font-size: 10px;"></i>
-            <div class="cubicle-tooltip">
-                <strong>${pos.cubicle_id}</strong><br>
-                ${isOccupied ? `${items.length} Barang Terpasang` : 'Belum Ada Barang'}
-            </div>
-        `;
+        // Click to view detail modal
+        div.onclick = (e) => {
+            e.stopPropagation();
+            if (typeof handleCubicleClick === 'function') {
+                handleCubicleClick(pos.cubicle_id);
+            }
+        };
 
-        container.appendChild(div);
+        stage.appendChild(div);
     });
+
+    // Auto-fit floorplan to container on initial render
+    if (!dashboardMapState.hasUserInteracted) {
+        setTimeout(() => fitDashboardMap(), 50);
+    } else {
+        applyDashboardMapTransform();
+    }
+
+    // Attach pan/drag listeners
+    setupDashboardMapPanListeners(container);
+}
+
+function fitDashboardMap() {
+    const container = document.getElementById('dashboardMiniMap');
+    const stage = document.getElementById('dashboardMapStage');
+    if (!container || !stage) return;
+
+    const bounds = dashboardMapState.stageBounds;
+    const contentW = Math.max(300, (bounds.maxX - bounds.minX) + 140);
+    const contentH = Math.max(300, (bounds.maxY - bounds.minY) + 140);
+
+    const contW = container.clientWidth || 1000;
+    const contH = container.clientHeight || 560;
+
+    // Calculate optimal scale to fit entire floor plan
+    const scaleX = (contW - 40) / contentW;
+    const scaleY = (contH - 40) / contentH;
+    const optimalScale = Math.max(0.3, Math.min(scaleX, scaleY, 1.1));
+
+    dashboardMapState.zoom = optimalScale;
+
+    // Center the content in the viewport
+    dashboardMapState.panX = Math.round((contW - contentW * optimalScale) / 2 - (bounds.minX - 70) * optimalScale);
+    dashboardMapState.panY = Math.round((contH - contentH * optimalScale) / 2 - (bounds.minY - 70) * optimalScale);
+
+    applyDashboardMapTransform();
+
+    // Reset zone pill active state to 'all'
+    document.querySelectorAll('.zone-pill-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-zone') === 'all'));
+}
+
+function zoomDashboardMap(delta) {
+    dashboardMapState.hasUserInteracted = true;
+    const newZoom = Math.max(0.25, Math.min(2.5, dashboardMapState.zoom + delta));
+    dashboardMapState.zoom = newZoom;
+    applyDashboardMapTransform();
+}
+
+function focusDashboardZone(zone) {
+    dashboardMapState.hasUserInteracted = true;
+    document.querySelectorAll('.zone-pill-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-zone') === zone));
+
+    if (zone === 'all') {
+        fitDashboardMap();
+        return;
+    }
+
+    const container = document.getElementById('dashboardMiniMap');
+    if (!container) return;
+
+    const contW = container.clientWidth || 1000;
+    const contH = container.clientHeight || 560;
+
+    // Filter items in that zone
+    const targetBlocks = zone.split('');
+    const targetItems = (cubiclePositions || []).filter(p => (p.x > 0 || p.y > 0) && targetBlocks.some(b => p.cubicle_id && p.cubicle_id.startsWith(b + '-')));
+
+    if (targetItems.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    targetItems.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
+
+    const contentW = Math.max(200, (maxX - minX) + 100);
+    const contentH = Math.max(200, (maxY - minY) + 100);
+
+    const scale = Math.max(0.5, Math.min((contW - 60) / contentW, (contH - 60) / contentH, 1.25));
+    dashboardMapState.zoom = scale;
+    dashboardMapState.panX = Math.round((contW - contentW * scale) / 2 - (minX - 50) * scale);
+    dashboardMapState.panY = Math.round((contH - contentH * scale) / 2 - (minY - 50) * scale);
+
+    applyDashboardMapTransform();
+}
+
+function setDashboardMapFilter(filter) {
+    dashboardMapState.currentFilter = filter;
+    document.querySelectorAll('.map-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+    });
+
+    const nodes = document.querySelectorAll('#dashboardMapStage .cubicle-view');
+    nodes.forEach(node => {
+        const isOccupied = node.getAttribute('data-occupied') === 'true';
+        const type = node.getAttribute('data-type');
+
+        let match = false;
+        if (filter === 'all') match = true;
+        else if (filter === 'occupied') match = isOccupied;
+        else if (filter === 'vacant') match = (!isOccupied && type !== 'room');
+        else if (filter === 'rooms') match = (type === 'room');
+
+        if (match) {
+            node.classList.remove('dimmed');
+        } else {
+            node.classList.add('dimmed');
+        }
+    });
+}
+
+function updateDashboardMapCounters(all, occupied, vacant, rooms) {
+    const elAll = document.getElementById('mapCountAll');
+    const elOcc = document.getElementById('mapCountOccupied');
+    const elVac = document.getElementById('mapCountVacant');
+    const elRms = document.getElementById('mapCountRooms');
+
+    if (elAll) elAll.textContent = all;
+    if (elOcc) elOcc.textContent = occupied;
+    if (elVac) elVac.textContent = vacant;
+    if (elRms) elRms.textContent = rooms;
+}
+
+function applyDashboardMapTransform() {
+    const stage = document.getElementById('dashboardMapStage');
+    if (!stage) return;
+    stage.style.transform = `translate(${dashboardMapState.panX}px, ${dashboardMapState.panY}px) scale(${dashboardMapState.zoom})`;
+}
+
+let isPanListenerAttached = false;
+function setupDashboardMapPanListeners(container) {
+    if (isPanListenerAttached || !container) return;
+    isPanListenerAttached = true;
+
+    container.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.cubicle-view') || e.target.closest('button')) return;
+        dashboardMapState.isDragging = true;
+        dashboardMapState.hasUserInteracted = true;
+        dashboardMapState.dragStartX = e.clientX - dashboardMapState.panX;
+        dashboardMapState.dragStartY = e.clientY - dashboardMapState.panY;
+        container.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!dashboardMapState.isDragging) return;
+        dashboardMapState.panX = e.clientX - dashboardMapState.dragStartX;
+        dashboardMapState.panY = e.clientY - dashboardMapState.dragStartY;
+        applyDashboardMapTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (dashboardMapState.isDragging) {
+            dashboardMapState.isDragging = false;
+            container.style.cursor = 'grab';
+        }
+    });
+
+    container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        dashboardMapState.hasUserInteracted = true;
+        const delta = e.deltaY < 0 ? 0.08 : -0.08;
+        zoomDashboardMap(delta);
+    }, { passive: false });
 }
 
 // Idea 2: Smart Highlight Search
 function highlightDashboardMap() {
-    const query = document.getElementById('dashboardMapSearch').value.toLowerCase();
-    const cubicles = document.querySelectorAll('#dashboardMiniMap .cubicle-view');
+    const query = (document.getElementById('dashboardMapSearch')?.value || '').toLowerCase().trim();
+    const cubicles = document.querySelectorAll('#dashboardMapStage .cubicle-view');
 
     if (!query) {
         cubicles.forEach(c => c.classList.remove('highlight-pulse', 'dimmed'));
+        if (dashboardMapState.currentFilter !== 'all') {
+            setDashboardMapFilter(dashboardMapState.currentFilter);
+        }
         return;
     }
 
     cubicles.forEach(c => {
-        const cubicleId = c.getAttribute('data-id');
+        const cubicleId = c.getAttribute('data-id') || '';
         const items = inventoryData.filter(inv => getCubicleId(inv) === cubicleId);
 
-        // Check if cubicle ID or any item inside matches query
         const match = cubicleId.toLowerCase().includes(query) ||
             items.some(inv =>
                 (inv.name && inv.name.toLowerCase().includes(query)) ||
@@ -695,14 +1352,20 @@ function highlightDashboardMap() {
     });
 }
 
-// Expose to global
+// Expose to global window
+window.renderDashboardMap = renderDashboardMap;
+window.fitDashboardMap = fitDashboardMap;
+window.zoomDashboardMap = zoomDashboardMap;
+window.focusDashboardZone = focusDashboardZone;
+window.setDashboardMapFilter = setDashboardMapFilter;
 window.highlightDashboardMap = highlightDashboardMap;
 
 function getInitialPage() {
     const validPages = [
         'dashboard', 'inventory', 'input', 'scan',
         'history', 'handover-data', 'handover-input',
-        'map-designer', 'map-view'
+        'map-designer', 'map-view',
+    'non-inventory'
     ];
 
     let page = '';
@@ -768,6 +1431,21 @@ async function navigateTo(page, updateHistory = true) {
     // Fix: Close any open modals when navigating
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('show'));
 
+    // Sync mobile bottom navigation bar active state
+    document.querySelectorAll('.mobile-nav-item').forEach(btn => {
+        btn.classList.remove('active');
+        const btnPage = btn.getAttribute('data-page');
+        if (btnPage) {
+            if (btnPage === page) {
+                btn.classList.add('active');
+            } else if (btnPage === 'inventory' && (page === 'input' || page === 'inventory')) {
+                btn.classList.add('active');
+            } else if (btnPage === 'handover-data' && (page === 'handover-data' || page === 'handover-input')) {
+                btn.classList.add('active');
+            }
+        }
+    });
+
     const pageId = page + 'Page';
     const targetPage = document.getElementById(pageId);
 
@@ -799,7 +1477,8 @@ async function navigateTo(page, updateHistory = true) {
         'handover-data': 'Data Serah Terima',
         'handover-input': 'Input Serah Terima',
         'map-designer': 'Mapping Lokasi',
-        'map-view': 'Visualisasi Denah'
+        'map-view': 'Visualisasi Denah',
+    'non-inventory': 'Non-Inventaris'
     };
     const titleEl = document.getElementById('pageTitle');
     if (titleEl) {
@@ -852,10 +1531,13 @@ async function navigateTo(page, updateHistory = true) {
             const kat = document.getElementById('handoverKategori');
             if (kat && kat.value && typeof loadItemsByCategory === 'function') loadItemsByCategory();
         }
+        if (typeof renderBASTChecklistChips === 'function') renderBASTChecklistChips();
         // Reinit signature pad after brief delay to ensure canvas is visible
         setTimeout(() => {
             if (typeof initSignaturePad === 'function') initSignaturePad();
         }, 150);
+    } else if (page === 'non-inventory') {
+        if (typeof loadNonInventory === 'function') loadNonInventory();
     }
 }
 
@@ -1020,7 +1702,14 @@ async function deleteSelectedItems() {
         return;
     }
 
-    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedItems.size} item?`);
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Item Inventaris',
+        message: `Apakah Anda yakin ingin menghapus <strong>${selectedItems.size} item</strong> inventaris terpilih? Tindakan ini tidak dapat dibatalkan.`,
+        confirmText: 'Ya, Hapus Sekarang',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
     if (!confirmDelete) return;
 
     isDeletingInventory = true;
@@ -1215,7 +1904,7 @@ function updateInventoryTable() {
                 </td>
                 <td>
                     <div class="unit-cell">
-                        <span class="category-badge ${categoryClass}">${item.name || '-'}</span>
+                        ${getCategoryBadgeHtml(item.name)}
                         <span class="unit-id-badge">#${item.id || '-'}</span>
                     </div>
                 </td>
@@ -1227,9 +1916,24 @@ function updateInventoryTable() {
                     </div>
                 </td>
                 <td>
-                    <span class="loc-tag">
-                        <i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}
-                    </span>
+                    <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
+                        <span class="loc-tag">
+                            <i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}
+                        </span>
+                        ${(() => {
+                            const latestBast = (typeof handoverData !== 'undefined' && Array.isArray(handoverData))
+                                ? handoverData.find(h => String(h.item_id) === String(item.id) || (item.sn && h.item_sn === item.sn))
+                                : null;
+                            const hasBastDiff = latestBast && latestBast.lokasi_baru && latestBast.lokasi_baru.trim() !== '-' &&
+                                latestBast.lokasi_baru.trim().toLowerCase() !== (item.lokasi || '').trim().toLowerCase();
+                            if (hasBastDiff) {
+                                return `<span class="sync-discrepancy-pill" onclick="quickSyncItemLocation('${item.id}', '${latestBast.lokasi_baru}')" title="BAST terakhir mencatat lokasi '${latestBast.lokasi_baru}'. Klik untuk samakan!">
+                                    <i class="fas fa-sync-alt"></i> BAST: ${latestBast.lokasi_baru}
+                                </span>`;
+                            }
+                            return '';
+                        })()}
+                    </div>
                 </td>
                 <td>
                     <div class="condition-flow">
@@ -1431,13 +2135,19 @@ function renderManageCategoryList() {
 
 async function deleteCategoryItem(id, name, count) {
     if (count > 0) {
-        alert(`Kategori "${name}" saat ini masih digunakan oleh ${count} barang inventaris!\n\nSilakan ubah kategori barang terkait terlebih dahulu sebelum menghapus kategori ini agar data aset tetap rapi.`);
+        showToast(`Kategori "${name}" masih digunakan oleh ${count} barang inventaris! Ubah kategori barang terkait terlebih dahulu.`, 'warning');
         return;
     }
 
-    if (!confirm(`Apakah Anda yakin ingin menghapus kategori "${name}" dari sistem?`)) {
-        return;
-    }
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Kategori',
+        message: `Apakah Anda yakin ingin menghapus kategori <strong>"${name}"</strong> dari sistem?`,
+        confirmText: 'Ya, Hapus Kategori',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
+    if (!confirmDelete) return;
 
     try {
         const res = await fetch(`/api/categories/${id}`, {
@@ -1867,23 +2577,88 @@ function applyPdfTableStyle(doc, options) {
 // ========================================
 // MODAL FUNCTIONS
 // ========================================
+function getCondBadgeClass(kondisi) {
+    if (!kondisi) return '';
+    const k = kondisi.toLowerCase();
+    if (k.includes('rusak berat')) return 'cond-rusak-berat';
+    if (k.includes('rusak') || k.includes('ringan')) return 'cond-rusak-ringan';
+    return 'cond-baik';
+}
+
 function viewItem(id) {
     const item = inventoryData.find(i => i.id === id);
     if (!item) return;
 
-    // Store current item ID for print
+    // Store current item ID for print & quick edit
     window.currentViewItemId = id;
+
+    // Header Badges
+    const idDisplay = document.getElementById('viewItemIdDisplay');
+    if (idDisplay) idDisplay.textContent = `#${item.id || '-'}`;
+
+    const catBadge = document.getElementById('viewCategoryBadge');
+    if (catBadge) {
+        catBadge.textContent = item.name || 'Device';
+        const styleObj = getCategoryBadgeStyle(item.name);
+        if (styleObj) {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark' || document.body.classList.contains('dark-theme');
+            const themeStyle = isDark ? styleObj.dark : styleObj.light;
+            catBadge.style.background = themeStyle.bg;
+            catBadge.style.color = themeStyle.color;
+            catBadge.style.borderColor = themeStyle.border;
+        }
+    }
 
     document.getElementById('viewItemName').textContent = item.name || '-';
     document.getElementById('viewMerk').textContent = item.merk || '-';
     document.getElementById('viewSn').textContent = item.sn || '-';
-    document.getElementById('viewSnConverter').textContent = item.snConverter || '-';
-    document.getElementById('viewLocation').textContent = item.lokasi || '-';
-    document.getElementById('viewKondisiBefore').textContent = item.kondisiBefore || '-';
-    document.getElementById('viewChecklist').textContent = item.checklist || '-';
-    document.getElementById('viewKondisiAfter').textContent = item.kondisiAfter || '-';
-    document.getElementById('viewCatatan').textContent = item.catatan || '-';
-    document.getElementById('viewItemDate').textContent = formatDate(item.date);
+
+    // SN Converter Row (Show only if present)
+    const snConverterRow = document.getElementById('viewSnConverterRow');
+    const snConverterVal = document.getElementById('viewSnConverter');
+    if (snConverterRow && snConverterVal) {
+        if (item.snConverter && item.snConverter.trim() !== '') {
+            snConverterVal.textContent = item.snConverter;
+            snConverterRow.style.display = 'flex';
+        } else {
+            snConverterVal.textContent = '-';
+            snConverterRow.style.display = 'none';
+        }
+    }
+
+    // Lokasi
+    const locElem = document.getElementById('viewLocation');
+    if (locElem) {
+        locElem.innerHTML = `<span class="loc-tag" style="background: rgba(37,99,235,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); padding: 3px 10px; border-radius: 6px;"><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</span>`;
+    }
+
+    // Kondisi Before & After with styled mini badges
+    const condBeforeElem = document.getElementById('viewKondisiBefore');
+    const condAfterElem = document.getElementById('viewKondisiAfter');
+    if (condBeforeElem) {
+        condBeforeElem.textContent = item.kondisiBefore || '-';
+        condBeforeElem.className = 'badge-mini-cond ' + getCondBadgeClass(item.kondisiBefore);
+    }
+    if (condAfterElem) {
+        condAfterElem.textContent = item.kondisiAfter || '-';
+        condAfterElem.className = 'badge-mini-cond ' + getCondBadgeClass(item.kondisiAfter);
+    }
+
+    // Checklist
+    const chkElem = document.getElementById('viewChecklist');
+    if (chkElem) {
+        const isYa = item.checklist === 'Ya';
+        chkElem.innerHTML = `<span class="status-badge ${isYa ? 'checked' : 'unchecked'}">${isYa ? '✓ Ya (Sesuai)' : '✕ Tidak (Belum)'}</span>`;
+    }
+
+    // Catatan
+    const catatanElem = document.getElementById('viewCatatan');
+    if (catatanElem) {
+        catatanElem.textContent = item.catatan && item.catatan.trim() ? item.catatan : 'Tidak ada catatan tambahan.';
+    }
+
+    // Tanggal
+    document.getElementById('viewItemDate').textContent = formatDate(item.date || item.tanggalMasuk);
 
     // Generate QR in modal
     const modalQr = document.getElementById('modal-qrcode');
@@ -1891,12 +2666,55 @@ function viewItem(id) {
     if (item.qrCode) {
         const img = document.createElement('img');
         img.src = item.qrCode;
-        img.alt = 'QR Code';
+        img.alt = 'QR Code ' + item.id;
         modalQr.appendChild(img);
     }
 
     openModal('viewModal');
 }
+
+// Copy SN to Clipboard
+function copySnToClipboard() {
+    const id = window.currentViewItemId;
+    if (!id) return;
+    const item = inventoryData.find(i => i.id === id);
+    if (!item || !item.sn) {
+        showToast('Tidak ada Serial Number yang dapat disalin', 'warning');
+        return;
+    }
+
+    const fallbackPrompt = () => {
+        showPromptDialog({
+            title: 'Salin Serial Number',
+            message: 'Silakan salin nomor seri aset berikut:',
+            defaultValue: item.sn,
+            confirmText: 'Selesai',
+            cancelText: 'Tutup'
+        });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(item.sn).then(() => {
+            showToast(`Serial Number "${item.sn}" berhasil disalin ke clipboard!`, 'success');
+        }).catch(() => {
+            fallbackPrompt();
+        });
+    } else {
+        fallbackPrompt();
+    }
+}
+window.copySnToClipboard = copySnToClipboard;
+
+// Quick Edit directly from View Modal
+function editFromViewModal() {
+    const id = window.currentViewItemId;
+    if (!id) return;
+    closeModal('viewModal');
+    setTimeout(() => {
+        editItem(id);
+    }, 150);
+}
+window.editFromViewModal = editFromViewModal;
 
 // Print Barcode Function
 function printBarcode() {
@@ -1960,6 +2778,9 @@ function editItem(id) {
     const item = inventoryData.find(i => i.id === id);
     if (!item) return;
 
+    const idBadge = document.getElementById('editItemIdBadge');
+    if (idBadge) idBadge.textContent = `#${item.id}`;
+
     document.getElementById('editItemId').value = item.id;
     document.getElementById('editItemName').value = item.name || '';
     document.getElementById('editMerk').value = item.merk || '';
@@ -1974,10 +2795,12 @@ function editItem(id) {
     document.getElementById('editItemDate').value = item.date || '';
 
     const snConverterRow = document.getElementById('editSnConverterRow');
-    if (item.name === 'Headset') {
-        snConverterRow.style.display = 'flex';
-    } else {
-        snConverterRow.style.display = 'none';
+    if (snConverterRow) {
+        if (item.name === 'Headset') {
+            snConverterRow.style.display = 'flex';
+        } else {
+            snConverterRow.style.display = 'none';
+        }
     }
 
     openModal('editModal');
@@ -2043,12 +2866,35 @@ async function saveEdit() {
 
     if (success) {
         closeModal('editModal');
-        showToast('Item berhasil diperbarui! QR Code telah digenerate.');
+        showToast('Item berhasil diperbarui! Lokasi telah disinkronkan ke BAST & Denah.');
+        if (typeof loadHandover === 'function') await loadHandover();
+        if (typeof renderHandoverTable === 'function') renderHandoverTable();
         renderDashboardMap();
         renderMap();
         updateDashboard();
     }
 }
+
+async function quickSyncItemLocation(id, newLoc) {
+    if (!id || !newLoc) return;
+    try {
+        const resolvedCubicle = extractCubicleId(newLoc);
+        const success = await updateInventoryItem(id, { lokasi: newLoc, cubicle_id: resolvedCubicle });
+        if (success) {
+            showToast(`Lokasi item #${id} berhasil diselaraskan ke "${newLoc}"!`, 'success');
+            if (typeof loadHandover === 'function') await loadHandover();
+            if (typeof updateInventoryTable === 'function') updateInventoryTable();
+            if (typeof renderHandoverTable === 'function') renderHandoverTable();
+            renderDashboardMap();
+            renderMap();
+            updateDashboard();
+        }
+    } catch (err) {
+        console.error('Quick sync error:', err);
+        showToast('Gagal menyelaraskan lokasi', 'error');
+    }
+}
+window.quickSyncItemLocation = quickSyncItemLocation;
 
 function deleteItem(id) {
     const item = inventoryData.find(i => i.id === id);
@@ -2410,20 +3256,195 @@ function formatDate(dateStr) {
     });
 }
 
-function showToast(message, isError = false) {
+function showToast(message, typeOrIsError = false) {
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toastMessage');
+    if (!toast || !toastMessage) return;
+
+    let isError = false;
+    let isWarning = false;
+
+    if (typeof typeOrIsError === 'boolean') {
+        isError = typeOrIsError;
+    } else if (typeof typeOrIsError === 'string') {
+        const type = typeOrIsError.toLowerCase().trim();
+        if (type === 'error' || type === 'danger' || type === 'fail') {
+            isError = true;
+        } else if (type === 'warning' || type === 'warn') {
+            isWarning = true;
+        } else {
+            // 'success', 'info', default
+            isError = false;
+            isWarning = false;
+        }
+    }
 
     toastMessage.textContent = message;
-    toast.classList.toggle('error', isError);
-    toast.querySelector('i').className = isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+    toast.classList.remove('error', 'warning', 'success');
+
+    const icon = toast.querySelector('i');
+    if (isError) {
+        toast.classList.add('error');
+        if (icon) icon.className = 'fas fa-exclamation-circle';
+    } else if (isWarning) {
+        toast.classList.add('warning');
+        if (icon) icon.className = 'fas fa-exclamation-triangle';
+    } else {
+        toast.classList.add('success');
+        if (icon) icon.className = 'fas fa-check-circle';
+    }
 
     toast.classList.add('show');
 
-    setTimeout(() => {
+    if (window._toastTimeout) clearTimeout(window._toastTimeout);
+    window._toastTimeout = setTimeout(() => {
         toast.classList.remove('show');
-    }, 3000);
+    }, 3200);
 }
+
+// ========================================
+// UNIVERSAL MODERN CONFIRM & PROMPT DIALOGS
+// ========================================
+function showConfirmDialog(options = {}) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('appConfirmDialogModal');
+        if (!modal) {
+            resolve(confirm(options.message ? options.message.replace(/<[^>]*>/g, '') : 'Apakah Anda yakin?'));
+            return;
+        }
+
+        const titleEl = document.getElementById('appConfirmTitle');
+        const msgEl = document.getElementById('appConfirmMessage');
+        const iconEl = document.getElementById('appConfirmIcon');
+        const iconBadge = document.getElementById('appConfirmIconBadge');
+        const cancelBtn = document.getElementById('appConfirmCancelBtn');
+        const actionBtn = document.getElementById('appConfirmActionBtn');
+
+        const title = options.title || 'Konfirmasi';
+        const message = options.message || 'Apakah Anda yakin ingin melanjutkan tindakan ini?';
+        const confirmText = options.confirmText || 'Ya, Lanjutkan';
+        const cancelText = options.cancelText || 'Batal';
+        const isDanger = options.danger !== false;
+
+        if (titleEl) titleEl.textContent = title;
+        if (msgEl) msgEl.innerHTML = message;
+        if (cancelBtn) cancelBtn.textContent = cancelText;
+        if (actionBtn) {
+            actionBtn.textContent = confirmText;
+            if (isDanger) {
+                actionBtn.style.background = '#ef4444';
+                actionBtn.style.color = '#ffffff';
+                if (iconBadge) {
+                    iconBadge.style.background = 'rgba(239, 68, 68, 0.12)';
+                    iconBadge.style.color = '#ef4444';
+                }
+                if (iconEl) iconEl.className = options.icon || 'fas fa-trash-alt';
+            } else {
+                actionBtn.style.background = 'var(--primary)';
+                actionBtn.style.color = '#ffffff';
+                if (iconBadge) {
+                    iconBadge.style.background = 'rgba(37, 99, 235, 0.12)';
+                    iconBadge.style.color = 'var(--primary)';
+                }
+                if (iconEl) iconEl.className = options.icon || 'fas fa-info-circle';
+            }
+        }
+
+        const cleanup = () => {
+            modal.classList.remove('show');
+            cancelBtn.removeEventListener('click', onCancel);
+            actionBtn.removeEventListener('click', onConfirm);
+            modal.removeEventListener('click', onOverlay);
+        };
+
+        const onCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        const onConfirm = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const onOverlay = (e) => {
+            if (e.target === modal) {
+                cleanup();
+                resolve(false);
+            }
+        };
+
+        cancelBtn.addEventListener('click', onCancel);
+        actionBtn.addEventListener('click', onConfirm);
+        modal.addEventListener('click', onOverlay);
+
+        modal.classList.add('show');
+    });
+}
+window.showConfirmDialog = showConfirmDialog;
+
+function showPromptDialog(options = {}) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('appPromptDialogModal');
+        if (!modal) {
+            resolve(prompt(options.message || 'Input teks:', options.defaultValue || ''));
+            return;
+        }
+
+        const titleEl = document.getElementById('appPromptTitle');
+        const msgEl = document.getElementById('appPromptMessage');
+        const inputEl = document.getElementById('appPromptInput');
+        const cancelBtn = document.getElementById('appPromptCancelBtn');
+        const actionBtn = document.getElementById('appPromptActionBtn');
+
+        if (titleEl) titleEl.textContent = options.title || 'Input Teks';
+        if (msgEl) msgEl.textContent = options.message || 'Masukkan keterangan:';
+        if (inputEl) {
+            inputEl.value = options.defaultValue || '';
+            inputEl.placeholder = options.placeholder || 'Ketik di sini...';
+        }
+        if (cancelBtn) cancelBtn.textContent = options.cancelText || 'Batal';
+        if (actionBtn) actionBtn.textContent = options.confirmText || 'Simpan';
+
+        const cleanup = () => {
+            modal.classList.remove('show');
+            cancelBtn.removeEventListener('click', onCancel);
+            actionBtn.removeEventListener('click', onConfirm);
+            if (inputEl) inputEl.removeEventListener('keydown', onKeyDown);
+            modal.removeEventListener('click', onOverlay);
+        };
+
+        const onCancel = () => {
+            cleanup();
+            resolve(null);
+        };
+
+        const onConfirm = () => {
+            const val = inputEl ? inputEl.value : '';
+            cleanup();
+            resolve(val);
+        };
+
+        const onKeyDown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onConfirm();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                onCancel();
+            }
+        };
+
+        cancelBtn.addEventListener('click', onCancel);
+        actionBtn.addEventListener('click', onConfirm);
+        if (inputEl) inputEl.addEventListener('keydown', onKeyDown);
+        modal.addEventListener('click', onOverlay);
+
+        modal.classList.add('show');
+        setTimeout(() => inputEl && inputEl.focus(), 120);
+    });
+}
+window.showPromptDialog = showPromptDialog;
 
 // ========================================
 // SCAN/CHECK INVENTORY FUNCTIONS
@@ -2487,8 +3508,16 @@ async function initScanPage() {
         let isResetting = false;
         resetBtn.addEventListener('click', async function () {
             if (isResetting) return;
-            if (confirm('Apakah Anda yakin ingin mereset semua checklist di database?')) {
-                isResetting = true;
+            const confirmReset = await showConfirmDialog({
+                title: 'Reset Audit Checklist',
+                message: 'Apakah Anda yakin ingin mereset seluruh status checklist fisik aset di database menjadi belum tercentang?',
+                confirmText: 'Ya, Reset Semua',
+                cancelText: 'Batal',
+                danger: true,
+                icon: 'fa-history'
+            });
+            if (!confirmReset) return;
+            isResetting = true;
                 try {
                     const response = await fetch('/api/inventory/reset-checklist', { method: 'POST' });
                     const data = await response.json();
@@ -2512,7 +3541,6 @@ async function initScanPage() {
                 } finally {
                     isResetting = false;
                 }
-            }
         });
     }
 
@@ -2925,77 +3953,266 @@ async function performScan() {
     }
 }
 
+let currentScannedItem = null;
+
 function showScanResultPopup(item, isDuplicate) {
+    currentScannedItem = item;
     const modal = document.getElementById('scanResultModal');
-    const title = document.getElementById('scanResultTitle');
-    const statusDiv = document.getElementById('scanResultStatus');
-    const tableBody = document.getElementById('scanResultTableBody');
+    if (!modal) return;
+
+    const statusBadge = document.getElementById('scanStatusBadge');
+    const headerSubtitle = document.getElementById('scanHeaderSubtitle');
+    const uncheckBtn = document.getElementById('scanUncheckBtn');
 
     if (isDuplicate) {
         modal.classList.remove('scan-result-modal-new');
         modal.classList.add('scan-result-modal-duplicate');
-        title.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Barang Sudah Pernah Dicek';
-        statusDiv.className = 'scan-result-banner scan-result-status-duplicate';
-        statusDiv.innerHTML = '<i class="fas fa-history"></i> Barang ini sudah pernah discan sebelumnya!';
+        if (statusBadge) {
+            statusBadge.className = 'audit-status-chip warning';
+            statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Sudah Dicek Sebelumnya';
+        }
+        if (headerSubtitle) {
+            headerSubtitle.textContent = 'Peringatan: Item ini sudah terverifikasi';
+        }
     } else {
         modal.classList.remove('scan-result-modal-duplicate');
         modal.classList.add('scan-result-modal-new');
-        title.innerHTML = '<i class="fas fa-check-circle"></i> Berhasil Dicek';
-        statusDiv.className = 'scan-result-banner scan-result-status-new';
-        statusDiv.innerHTML = '<i class="fas fa-star"></i> Barang berhasil dicek untuk pertama kali.';
+        if (statusBadge) {
+            statusBadge.className = 'audit-status-chip success';
+            statusBadge.innerHTML = '<i class="fas fa-check-circle"></i> Berhasil Dicek';
+        }
+        if (headerSubtitle) {
+            headerSubtitle.textContent = 'Audit Fisik Lapangan Terverifikasi';
+        }
     }
 
-    const statusBadge = isDuplicate
-        ? '<span class="status-badge-inline warning"><i class="fas fa-history"></i> Sudah Dicek</span>'
-        : '<span class="status-badge-inline success"><i class="fas fa-check"></i> Pertama Kali</span>';
+    // Hero Avatar icon
+    const avatarEl = document.getElementById('scanHeroAvatar');
+    if (avatarEl) {
+        const cat = (item.name || '').toLowerCase();
+        let icon = 'fa-box';
+        let bg = 'linear-gradient(135deg, #2563eb, #1e3a8a)';
+        if (cat.includes('laptop')) { icon = 'fa-laptop'; bg = 'linear-gradient(135deg, #3b82f6, #1d4ed8)'; }
+        else if (cat.includes('pc') || cat.includes('komputer')) { icon = 'fa-desktop'; bg = 'linear-gradient(135deg, #06b6d4, #0891b2)'; }
+        else if (cat.includes('monitor')) { icon = 'fa-tv'; bg = 'linear-gradient(135deg, #10b981, #047857)'; }
+        else if (cat.includes('headset')) { icon = 'fa-headphones'; bg = 'linear-gradient(135deg, #a855f7, #7e22ce)'; }
+        else if (cat.includes('keyboard')) { icon = 'fa-keyboard'; bg = 'linear-gradient(135deg, #6366f1, #4338ca)'; }
+        else if (cat.includes('mouse')) { icon = 'fa-mouse'; bg = 'linear-gradient(135deg, #f97316, #c2410c)'; }
+        else if (cat.includes('printer')) { icon = 'fa-print'; bg = 'linear-gradient(135deg, #14b8a6, #0f766e)'; }
+        else if (cat.includes('ac')) { icon = 'fa-snowflake'; bg = 'linear-gradient(135deg, #38bdf8, #0284c7)'; }
+        else if (cat.includes('switch') || cat.includes('router')) { icon = 'fa-network-wired'; bg = 'linear-gradient(135deg, #64748b, #334155)'; }
+        avatarEl.style.background = bg;
+        avatarEl.innerHTML = `<i class="fas ${icon}"></i>`;
+    }
+
+    // Hero Data
+    const nameEl = document.getElementById('scanHeroName');
+    const idEl = document.getElementById('scanHeroId');
+    const snEl = document.getElementById('scanHeroSn');
+    const locTextEl = document.getElementById('scanHeroLocText');
+
+    if (nameEl) nameEl.textContent = `${item.name || 'Barang'} ${item.merk ? '(' + item.merk + ')' : ''}`;
+    if (idEl) idEl.textContent = item.id || '-';
+    if (snEl) snEl.textContent = item.sn || '-';
+    if (locTextEl) locTextEl.textContent = item.lokasi || 'Belum di-assign';
+
+    // 2-Column Info
+    const catEl = document.getElementById('scanSpecCategory');
+    const merkEl = document.getElementById('scanSpecMerk');
+    const snConvEl = document.getElementById('scanSpecSnConv');
+    const checklistEl = document.getElementById('scanAuditChecklist');
+    const statusTagEl = document.getElementById('scanAuditStatusTag');
+    const timeEl = document.getElementById('scanAuditTime');
+
+    if (catEl) catEl.textContent = item.name || '-';
+    if (merkEl) merkEl.textContent = item.merk || '-';
+    if (snConvEl) snConvEl.textContent = item.snConverter || '-';
+
+    const isChecked = item.checklist === 'Ya';
+    if (checklistEl) {
+        checklistEl.innerHTML = isChecked
+            ? '<span class="badge-status-pill verified"><i class="fas fa-check"></i> Sudah</span>'
+            : '<span class="badge-status-pill unverified"><i class="fas fa-times"></i> Belum</span>';
+    }
+
+    if (statusTagEl) {
+        statusTagEl.innerHTML = isDuplicate
+            ? '<span class="badge-status-pill already"><i class="fas fa-history"></i> Sudah Pernah</span>'
+            : '<span class="badge-status-pill first-time"><i class="fas fa-star"></i> Pertama Kali</span>';
+    }
 
     const checkTime = item.checkTime || new Date().toISOString();
+    if (timeEl) timeEl.textContent = formatDateTime(checkTime);
 
-    tableBody.innerHTML = `
-        <tr>
-            <td><i class="fas fa-tag"></i> ID Inventaris</td>
-            <td>${item.id}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-cube"></i> Nama Barang</td>
-            <td><span class="badge primary">${item.name}</span></td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-industry"></i> Merk</td>
-            <td>${item.merk}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-barcode"></i> Serial Number</td>
-            <td>${item.sn}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-exchange-alt"></i> SN Converter</td>
-            <td>${item.snConverter || '-'}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-map-marker-alt"></i> Lokasi</td>
-            <td>${item.lokasi}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-heartbeat"></i> Kondisi</td>
-            <td><span class="badge success">${item.kondisiAfter || item.kondisiBefore || 'Baik'}</span></td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-clipboard-check"></i> Checklist</td>
-            <td>${item.checklist === 'Ya' ? 'Sudah' : 'Belum'}</td>
-        </tr>
-        <tr>
-            <td><i class="fas fa-flag"></i> Status Akhir</td>
-            <td>${statusBadge}</td>
-        </tr>
-        <tr>
-            <td><i class="far fa-clock"></i> Waktu Dicek</td>
-            <td>${formatDateTime(checkTime)}</td>
-        </tr>
-    `;
+    // Condition Selection State
+    const currentKondisi = item.kondisiAfter || item.kondisiBefore || 'Baik';
+    selectAuditCondition(currentKondisi, false);
+
+    // Uncheck button state
+    if (uncheckBtn) {
+        if (isChecked) {
+            uncheckBtn.style.display = 'inline-flex';
+            uncheckBtn.innerHTML = '<i class="fas fa-undo"></i> <span>Batalkan Cek (Uncheck)</span>';
+            uncheckBtn.className = 'btn-audit-uncheck';
+        } else {
+            uncheckBtn.style.display = 'inline-flex';
+            uncheckBtn.innerHTML = '<i class="fas fa-check"></i> <span>Tandai Sudah Dicek</span>';
+            uncheckBtn.className = 'btn-audit-next';
+        }
+    }
 
     openModal('scanResultModal');
 }
+
+function copyCurrentScanSn() {
+    if (!currentScannedItem || !currentScannedItem.sn) {
+        showToast('Nomor seri tidak tersedia', 'warning');
+        return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentScannedItem.sn).then(() => {
+            showToast(`Serial Number "${currentScannedItem.sn}" berhasil disalin!`, 'success');
+        }).catch(() => {
+            showToast(currentScannedItem.sn, 'info');
+        });
+    } else {
+        showToast(currentScannedItem.sn, 'info');
+    }
+}
+window.copyCurrentScanSn = copyCurrentScanSn;
+
+async function selectAuditCondition(kondisi, persist = true) {
+    const hiddenInput = document.getElementById('scanSelectedCondition');
+    if (hiddenInput) hiddenInput.value = kondisi;
+
+    // Update chips visual state
+    const chipsContainer = document.getElementById('scanConditionChips');
+    if (chipsContainer) {
+        const buttons = chipsContainer.querySelectorAll('.cond-chip');
+        buttons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.textContent.trim().toLowerCase().includes(kondisi.toLowerCase())) {
+                btn.classList.add('active');
+            }
+        });
+    }
+
+    if (!persist || !currentScannedItem || !currentScannedItem.id) return;
+
+    try {
+        const res = await fetch('/api/inventory/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchValue: currentScannedItem.id, kondisi: kondisi })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentScannedItem.kondisiAfter = kondisi;
+            const idx = inventoryData.findIndex(i => i.id === currentScannedItem.id);
+            if (idx !== -1) inventoryData[idx].kondisiAfter = kondisi;
+            renderScanTable();
+            showToast(`Kondisi fisik diperbarui menjadi "${kondisi}"`, 'success');
+        }
+    } catch (err) {
+        console.error('Error updating audit condition:', err);
+    }
+}
+window.selectAuditCondition = selectAuditCondition;
+
+async function toggleCurrentScanChecklist(forceStatus = null) {
+    if (!currentScannedItem || !currentScannedItem.id) return;
+
+    try {
+        const target = forceStatus !== null ? forceStatus : (currentScannedItem.checklist === 'Ya' ? 'Tidak' : 'Ya');
+        const res = await fetch('/api/inventory/toggle-checklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentScannedItem.id, status: target })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentScannedItem.checklist = data.checklist;
+            currentScannedItem.checkTime = data.item.checkTime;
+
+            const idx = inventoryData.findIndex(i => i.id === currentScannedItem.id);
+            if (idx !== -1) {
+                inventoryData[idx].checklist = data.checklist;
+                inventoryData[idx].checkTime = data.item.checkTime;
+            }
+
+            if (data.checklist === 'Ya') {
+                checkedItems[currentScannedItem.id] = { checked: true, checkTime: data.item.checkTime };
+                showToast(`Item ${currentScannedItem.id} ditandai Sudah Dicek`, 'success');
+            } else {
+                delete checkedItems[currentScannedItem.id];
+                showToast(`Checklist item ${currentScannedItem.id} dibatalkan (Belum Dicek)`, 'info');
+            }
+
+            renderScanTable();
+            updateScanStats();
+            showScanResultPopup(currentScannedItem, false);
+        } else {
+            showToast(data.message || 'Gagal mengubah status', true);
+        }
+    } catch (err) {
+        console.error('Error toggle checklist in modal:', err);
+        showToast('Koneksi bermasalah', true);
+    }
+}
+window.toggleCurrentScanChecklist = toggleCurrentScanChecklist;
+
+function continueNextScan() {
+    closeModal('scanResultModal');
+    setTimeout(() => {
+        const scanInput = document.getElementById('scanInput');
+        if (scanInput) {
+            scanInput.value = '';
+            scanInput.focus();
+        }
+    }, 150);
+}
+window.continueNextScan = continueNextScan;
+
+async function toggleItemAuditCheck(id, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!id) return;
+
+    try {
+        const res = await fetch('/api/inventory/toggle-checklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+            const idx = inventoryData.findIndex(i => i.id === id);
+            if (idx !== -1) {
+                inventoryData[idx].checklist = data.checklist;
+                inventoryData[idx].checkTime = data.item.checkTime;
+            }
+
+            if (data.checklist === 'Ya') {
+                checkedItems[id] = { checked: true, checkTime: data.item.checkTime };
+                showToast(`"${id}" ditandai Sudah Dicek`, 'success');
+            } else {
+                delete checkedItems[id];
+                showToast(`"${id}" dibatalkan (Belum Dicek)`, 'info');
+            }
+
+            renderScanTable();
+            updateScanStats();
+        } else {
+            showToast(data.message || 'Gagal mengubah status', true);
+        }
+    } catch (err) {
+        console.error('Error toggling audit item:', err);
+        showToast('Terjadi kesalahan', true);
+    }
+}
+window.toggleItemAuditCheck = toggleItemAuditCheck;
 
 // SCAN PAGINATION
 let scanPage = 1;
@@ -3039,12 +4256,25 @@ function renderScanTable() {
 
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
+
+    const statusSelect = document.getElementById('scanStatusFilter');
+    const statusValue = statusSelect ? statusSelect.value : 'all';
+
     const limitSelect = document.getElementById('scanViewLimit');
     scanItemsPerPage = limitSelect ? (parseInt(limitSelect.value) || 10) : 10;
 
     let filteredData = inventoryData;
+
+    // Filter Kategori
     if (filterValue !== 'all') {
-        filteredData = inventoryData.filter(item => item.name === filterValue);
+        filteredData = filteredData.filter(item => item.name === filterValue);
+    }
+
+    // Filter Status Cek Fisik
+    if (statusValue === 'checked') {
+        filteredData = filteredData.filter(item => checkedItems[item.id] && checkedItems[item.id].checked);
+    } else if (statusValue === 'unchecked') {
+        filteredData = filteredData.filter(item => !checkedItems[item.id] || !checkedItems[item.id].checked);
     }
 
     if (sortState['scanTable'] && sortState['scanTable'].key) {
@@ -3091,14 +4321,18 @@ function renderScanTable() {
         const checkTime = isChecked ? checkedItems[item.id].checkTime : null;
         const rowClass = isChecked ? 'scan-item-checked' : '';
         const statusBadge = isChecked
-            ? '<span class="status-badge checked">Sudah Dicek</span>'
-            : '<span class="status-badge unchecked">Belum Dicek</span>';
+            ? `<button type="button" class="status-badge checked interactive-toggle" onclick="toggleItemAuditCheck('${item.id}', event)" title="Klik untuk membatalkan checklist (Uncheck)">
+                <i class="fas fa-check-circle"></i> Sudah Dicek
+               </button>`
+            : `<button type="button" class="status-badge unchecked interactive-toggle" onclick="toggleItemAuditCheck('${item.id}', event)" title="Klik untuk tandai sudah dicek">
+                <i class="far fa-circle"></i> Belum Dicek
+               </button>`;
 
         return `
             <tr class="${rowClass}" data-id="${item.id}">
                 <td>${statusBadge}</td>
                 <td><span class="barcode-display">${item.id || '-'}</span></td>
-                <td><span class="category-badge ${(item.name || '').toLowerCase()}">${item.name || '-'}</span></td>
+                <td>${getCategoryBadgeHtml(item.name)}</td>
                 <td>${item.merk || '-'}</td>
                 <td><span class="barcode-display">${item.sn || '-'}</span></td>
                 <td>${item.lokasi || '-'}</td>
@@ -3162,10 +4396,36 @@ function updateScanStats() {
 
     const unchecked = total - checked;
 
-    document.getElementById('totalToCheck').textContent = total;
-    document.getElementById('totalChecked').textContent = checked;
-    document.getElementById('totalUnchecked').textContent = unchecked;
+    const elTotal = document.getElementById('totalToCheck');
+    const elChecked = document.getElementById('totalChecked');
+    const elUnchecked = document.getElementById('totalUnchecked');
+
+    if (elTotal) elTotal.textContent = total;
+    if (elChecked) elChecked.textContent = checked;
+    if (elUnchecked) elUnchecked.textContent = unchecked;
+
+    // Highlight aktif pada kartu counter berdasarkan pilihan filter status
+    const statusSelect = document.getElementById('scanStatusFilter');
+    const statusVal = statusSelect ? statusSelect.value : 'all';
+
+    const cardAll = document.getElementById('cardFilterAll');
+    const cardChecked = document.getElementById('cardFilterChecked');
+    const cardUnchecked = document.getElementById('cardFilterUnchecked');
+
+    if (cardAll) cardAll.classList.toggle('active-filter', statusVal === 'all');
+    if (cardChecked) cardChecked.classList.toggle('active-filter', statusVal === 'checked');
+    if (cardUnchecked) cardUnchecked.classList.toggle('active-filter', statusVal === 'unchecked');
 }
+
+function setScanStatusFilter(status) {
+    const statusSelect = document.getElementById('scanStatusFilter');
+    if (statusSelect) {
+        statusSelect.value = status;
+        scanPage = 1;
+        updateScanTable();
+    }
+}
+window.setScanStatusFilter = setScanStatusFilter;
 
 function formatDateTime(dateStr) {
     if (!dateStr) return '-';
@@ -3206,14 +4466,21 @@ async function exportChecklistToExcel() {
         return;
     }
 
-    // Get filter value
+    // Get filter values
     const filterSelect = document.getElementById('scanFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
+    const statusSelect = document.getElementById('scanStatusFilter');
+    const statusValue = statusSelect ? statusSelect.value : 'all';
 
     // Filter inventory data
     let filteredData = inventoryData;
     if (filterValue !== 'all') {
         filteredData = inventoryData.filter(item => item.name === filterValue);
+    }
+    if (statusValue === 'checked') {
+        filteredData = filteredData.filter(item => checkedItems[item.id] && checkedItems[item.id].checked);
+    } else if (statusValue === 'unchecked') {
+        filteredData = filteredData.filter(item => !checkedItems[item.id] || !checkedItems[item.id].checked);
     }
 
     if (sortState['scanTable'] && sortState['scanTable'].key) {
@@ -3357,12 +4624,17 @@ function exportChecklistToPdf() {
 
         var filterSelect = document.getElementById('scanFilter');
         var filterValue = filterSelect ? filterSelect.value : 'all';
+        var statusSelect = document.getElementById('scanStatusFilter');
+        var statusValue = statusSelect ? statusSelect.value : 'all';
 
         var filteredData = [];
         for (var i = 0; i < inventoryData.length; i++) {
             var item = inventoryData[i];
             if (!item) continue;
             if (filterValue !== 'all' && item.name !== filterValue) continue;
+            var isItemChecked = checkedItems[item.id] && checkedItems[item.id].checked;
+            if (statusValue === 'checked' && !isItemChecked) continue;
+            if (statusValue === 'unchecked' && isItemChecked) continue;
             filteredData.push(item);
         }
 
@@ -3646,7 +4918,14 @@ async function deleteSelectedHistory() {
         return;
     }
 
-    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedHistoryItems.size} history?`);
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Riwayat Aktivitas',
+        message: `Apakah Anda yakin ingin menghapus <strong>${selectedHistoryItems.size} catatan riwayat</strong> terpilih? Data riwayat yang terhapus tidak dapat dipulihkan.`,
+        confirmText: 'Ya, Hapus Riwayat',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
     if (!confirmDelete) return;
 
     try {
@@ -4125,8 +5404,14 @@ async function loadItemsByCategory() {
     if (!kategori) {
         itemSelect.innerHTML = '<option value="">Pilih Kategori Terlebih Dahulu</option>';
         itemSelect.disabled = true;
+        if (typeof updateChecklistByCategory === 'function') updateChecklistByCategory('laptop');
         if (typeof loadHandoverItemDetails === 'function') loadHandoverItemDetails();
         return;
+    }
+
+    // Perbarui checklist bawaan sesuai kategori yang dipilih secara dinamis
+    if (typeof updateChecklistByCategory === 'function') {
+        updateChecklistByCategory(kategori);
     }
 
     itemSelect.disabled = true;
@@ -4340,6 +5625,399 @@ window.loadHandoverItemDetails = loadHandoverItemDetails;
 window.generateAutoNoBA = generateAutoNoBA;
 window.toggleHandoverFields = toggleHandoverFields;
 
+let uploadedEvidentPhotos = [];
+
+function compressImage(file, maxWidth = 1280, quality = 0.78) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleEvidentPhotoUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    for (const file of Array.from(files)) {
+        try {
+            const compressed = await compressImage(file, 1280, 0.78);
+            uploadedEvidentPhotos.push(compressed);
+        } catch (err) {
+            console.error('Error compressing image:', err);
+        }
+    }
+    renderEvidentPhotoPreviews();
+    event.target.value = '';
+}
+
+function removeEvidentPhoto(index) {
+    uploadedEvidentPhotos.splice(index, 1);
+    renderEvidentPhotoPreviews();
+}
+
+function renderEvidentPhotoPreviews() {
+    const container = document.getElementById('evidentPhotoPreviewContainer');
+    if (!container) return;
+    container.innerHTML = uploadedEvidentPhotos.map((src, idx) => `
+        <div class="evident-preview-item">
+            <img src="${src}" alt="Dokumentasi ${idx + 1}">
+            <button type="button" class="evident-remove-btn" onclick="removeEvidentPhoto(${idx})" title="Hapus foto">&times;</button>
+        </div>
+    `).join('');
+}
+
+// Edit Modal Evident Photos State & Handlers
+let editUploadedEvidentPhotos = [];
+
+async function handleEditEvidentPhotoUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of Array.from(files)) {
+        try {
+            const compressed = await compressImage(file, 1280, 0.78);
+            editUploadedEvidentPhotos.push(compressed);
+        } catch (err) {
+            console.error('Error compressing image for edit modal:', err);
+        }
+    }
+    renderEditEvidentPhotoPreviews();
+    event.target.value = '';
+}
+
+function removeEditEvidentPhoto(index) {
+    if (index >= 0 && index < editUploadedEvidentPhotos.length) {
+        editUploadedEvidentPhotos.splice(index, 1);
+        renderEditEvidentPhotoPreviews();
+    }
+}
+
+function renderEditEvidentPhotoPreviews() {
+    const container = document.getElementById('editEvidentPhotoPreviewContainer');
+    if (!container) return;
+    container.innerHTML = editUploadedEvidentPhotos.map((src, idx) => `
+        <div class="evident-preview-item">
+            <img src="${src}" alt="Dokumentasi ${idx + 1}">
+            <button type="button" class="evident-remove-btn" onclick="removeEditEvidentPhoto(${idx})" title="Hapus foto">&times;</button>
+        </div>
+    `).join('');
+}
+
+window.handleEditEvidentPhotoUpload = handleEditEvidentPhotoUpload;
+window.removeEditEvidentPhoto = removeEditEvidentPhoto;
+window.renderEditEvidentPhotoPreviews = renderEditEvidentPhotoPreviews;
+
+// ======================================================
+// DYNAMIC CATEGORY CHECKLIST FOR BAST (SMART CHIPS)
+// ======================================================
+const DEFAULT_CATEGORY_CHECKLIST = {
+    laptop: [
+        { name: 'Laptop', checked: true, icon: 'fa-laptop' },
+        { name: 'Charger', checked: true, icon: 'fa-plug' },
+        { name: 'Dus', checked: false, icon: 'fa-box' },
+        { name: 'Tas Laptop', checked: true, icon: 'fa-briefcase' }
+    ],
+    monitor: [
+        { name: 'Unit Monitor', checked: true, icon: 'fa-desktop' },
+        { name: 'Kabel Power', checked: true, icon: 'fa-plug' },
+        { name: 'Kabel HDMI / VGA', checked: true, icon: 'fa-random' },
+        { name: 'Stand / Kaki Monitor', checked: true, icon: 'fa-tv' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ],
+    pc: [
+        { name: 'Unit PC / CPU', checked: true, icon: 'fa-server' },
+        { name: 'Kabel Power', checked: true, icon: 'fa-plug' },
+        { name: 'Keyboard', checked: true, icon: 'fa-keyboard' },
+        { name: 'Mouse', checked: true, icon: 'fa-mouse' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ],
+    keyboard: [
+        { name: 'Unit Keyboard', checked: true, icon: 'fa-keyboard' },
+        { name: 'Kabel USB / Dongle', checked: true, icon: 'fa-plug' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ],
+    mouse: [
+        { name: 'Unit Mouse', checked: true, icon: 'fa-mouse' },
+        { name: 'Kabel / Dongle USB', checked: true, icon: 'fa-plug' },
+        { name: 'Baterai', checked: true, icon: 'fa-battery-full' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ],
+    headset: [
+        { name: 'Unit Headset', checked: true, icon: 'fa-headphones' },
+        { name: 'Kabel Audio / USB', checked: true, icon: 'fa-plug' },
+        { name: 'Busa Mic / Earpad', checked: true, icon: 'fa-circle' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ],
+    tv: [
+        { name: 'Unit TV', checked: true, icon: 'fa-tv' },
+        { name: 'Remote Control', checked: true, icon: 'fa-gamepad' },
+        { name: 'Kabel Power', checked: true, icon: 'fa-plug' },
+        { name: 'Bracket / Kaki TV', checked: true, icon: 'fa-border-all' },
+        { name: 'Dus', checked: false, icon: 'fa-box' }
+    ]
+};
+
+let activeChecklistItems = [
+    { name: 'Laptop', checked: true, icon: 'fa-laptop' },
+    { name: 'Charger', checked: true, icon: 'fa-plug' },
+    { name: 'Dus', checked: false, icon: 'fa-box' },
+    { name: 'Tas Laptop', checked: true, icon: 'fa-briefcase' }
+];
+
+function escapeChecklistText(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderBASTChecklistChips() {
+    const container = document.getElementById('bastChecklistChipsContainer');
+    if (!container) return;
+
+    if (!activeChecklistItems || activeChecklistItems.length === 0) {
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-tertiary); font-style: italic;">Belum ada item kelengkapan. Tambahkan melalui input di bawah.</span>';
+        return;
+    }
+
+    container.innerHTML = activeChecklistItems.map((item, idx) => `
+        <label class="checklist-chip-label" data-index="${idx}">
+            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleChecklistChip(${idx})">
+            <span class="chip-content">
+                <i class="fas ${item.icon || 'fa-tag'}"></i>
+                <span class="chip-text">${escapeChecklistText(item.name)}</span>
+            </span>
+            <button type="button" class="checklist-chip-remove" onclick="event.stopPropagation(); event.preventDefault(); removeChecklistChip(${idx});" title="Hapus item">&times;</button>
+        </label>
+    `).join('');
+}
+
+function updateChecklistByCategory(category) {
+    const cat = (category || 'laptop').toLowerCase().trim();
+    let matched = null;
+
+    if (DEFAULT_CATEGORY_CHECKLIST[cat]) {
+        matched = DEFAULT_CATEGORY_CHECKLIST[cat];
+    } else {
+        for (const key of Object.keys(DEFAULT_CATEGORY_CHECKLIST)) {
+            if (cat.includes(key) || key.includes(cat)) {
+                matched = DEFAULT_CATEGORY_CHECKLIST[key];
+                break;
+            }
+        }
+    }
+
+    if (matched) {
+        activeChecklistItems = matched.map(i => ({ ...i }));
+    } else {
+        activeChecklistItems = [
+            { name: category ? `${category}` : 'Unit Barang', checked: true, icon: 'fa-cube' },
+            { name: 'Kabel Power / Adaptor', checked: true, icon: 'fa-plug' },
+            { name: 'Dus', checked: false, icon: 'fa-box' }
+        ];
+    }
+
+    renderBASTChecklistChips();
+}
+
+function addCustomChecklistChip() {
+    const input = document.getElementById('newChecklistInput');
+    if (!input) return;
+    const val = input.value.trim();
+    if (!val) {
+        input.focus();
+        return;
+    }
+
+    // Mendukung pemisahan dengan koma (misal "Mouse, Baterai")
+    const items = val.split(',').map(s => s.trim()).filter(Boolean);
+    items.forEach(name => {
+        const exists = activeChecklistItems.some(i => i.name.toLowerCase() === name.toLowerCase());
+        if (!exists) {
+            let icon = 'fa-tag';
+            const low = name.toLowerCase();
+            if (low.includes('mouse')) icon = 'fa-mouse';
+            else if (low.includes('keyboard')) icon = 'fa-keyboard';
+            else if (low.includes('baterai') || low.includes('battery')) icon = 'fa-battery-full';
+            else if (low.includes('kabel') || low.includes('cable')) icon = 'fa-random';
+            else if (low.includes('adaptor') || low.includes('charger')) icon = 'fa-plug';
+            else if (low.includes('tas')) icon = 'fa-briefcase';
+            else if (low.includes('dus') || low.includes('box')) icon = 'fa-box';
+
+            activeChecklistItems.push({
+                name: name,
+                checked: true,
+                icon: icon
+            });
+        }
+    });
+
+    input.value = '';
+    renderBASTChecklistChips();
+}
+
+function removeChecklistChip(index) {
+    if (index >= 0 && index < activeChecklistItems.length) {
+        activeChecklistItems.splice(index, 1);
+        renderBASTChecklistChips();
+    }
+}
+
+function toggleChecklistChip(index) {
+    if (index >= 0 && index < activeChecklistItems.length) {
+        activeChecklistItems[index].checked = !activeChecklistItems[index].checked;
+    }
+}
+
+function getSelectedChecklistBAST() {
+    return JSON.stringify(activeChecklistItems.map(item => ({
+        name: item.name,
+        checked: Boolean(item.checked)
+    })));
+}
+
+function getChecklistIconByName(name) {
+    if (!name) return 'fa-tag';
+    const low = name.toLowerCase();
+    if (low.includes('mouse')) return 'fa-mouse';
+    if (low.includes('keyboard')) return 'fa-keyboard';
+    if (low.includes('baterai') || low.includes('battery')) return 'fa-battery-full';
+    if (low.includes('kabel') || low.includes('cable') || low.includes('hdmi')) return 'fa-random';
+    if (low.includes('adaptor') || low.includes('charger') || low.includes('power')) return 'fa-plug';
+    if (low.includes('tas')) return 'fa-briefcase';
+    if (low.includes('dus') || low.includes('box')) return 'fa-box';
+    if (low.includes('monitor') || low.includes('layar')) return 'fa-desktop';
+    if (low.includes('pc') || low.includes('cpu')) return 'fa-server';
+    if (low.includes('headset') || low.includes('headphone')) return 'fa-headphones';
+    if (low.includes('tv')) return 'fa-tv';
+    return 'fa-tag';
+}
+
+// Edit Modal Checklist State & Handlers
+let editActiveChecklistItems = [];
+
+function renderEditBASTChecklistChips() {
+    const container = document.getElementById('editBastChecklistChipsContainer');
+    if (!container) return;
+
+    if (!editActiveChecklistItems || editActiveChecklistItems.length === 0) {
+        container.innerHTML = '<span style="font-size: 12px; color: var(--text-tertiary); font-style: italic;">Belum ada item kelengkapan. Tambahkan melalui input di bawah.</span>';
+        return;
+    }
+
+    container.innerHTML = editActiveChecklistItems.map((item, idx) => `
+        <label class="checklist-chip-label" data-index="${idx}">
+            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggleEditChecklistChip(${idx})">
+            <span class="chip-content">
+                <i class="fas ${item.icon || getChecklistIconByName(item.name)}"></i>
+                <span class="chip-text">${escapeChecklistText(item.name)}</span>
+            </span>
+            <button type="button" class="checklist-chip-remove" onclick="event.stopPropagation(); event.preventDefault(); removeEditChecklistChip(${idx});" title="Hapus item">&times;</button>
+        </label>
+    `).join('');
+}
+
+function addCustomEditChecklistChip() {
+    const input = document.getElementById('newEditChecklistInput');
+    if (!input) return;
+    const val = input.value.trim();
+    if (!val) {
+        input.focus();
+        return;
+    }
+
+    const items = val.split(',').map(s => s.trim()).filter(Boolean);
+    items.forEach(name => {
+        const exists = editActiveChecklistItems.some(i => i.name.toLowerCase() === name.toLowerCase());
+        if (!exists) {
+            editActiveChecklistItems.push({
+                name: name,
+                checked: true,
+                icon: getChecklistIconByName(name)
+            });
+        }
+    });
+
+    input.value = '';
+    renderEditBASTChecklistChips();
+}
+
+function removeEditChecklistChip(index) {
+    if (index >= 0 && index < editActiveChecklistItems.length) {
+        editActiveChecklistItems.splice(index, 1);
+        renderEditBASTChecklistChips();
+    }
+}
+
+function toggleEditChecklistChip(index) {
+    if (index >= 0 && index < editActiveChecklistItems.length) {
+        editActiveChecklistItems[index].checked = !editActiveChecklistItems[index].checked;
+    }
+}
+
+window.renderBASTChecklistChips = renderBASTChecklistChips;
+window.updateChecklistByCategory = updateChecklistByCategory;
+window.addCustomChecklistChip = addCustomChecklistChip;
+window.removeChecklistChip = removeChecklistChip;
+window.toggleChecklistChip = toggleChecklistChip;
+window.getSelectedChecklistBAST = getSelectedChecklistBAST;
+window.renderEditBASTChecklistChips = renderEditBASTChecklistChips;
+window.addCustomEditChecklistChip = addCustomEditChecklistChip;
+window.removeEditChecklistChip = removeEditChecklistChip;
+window.toggleEditChecklistChip = toggleEditChecklistChip;
+
+function autoFillBASTEmail(name) {
+    if (!name) return;
+    const emailInput = document.getElementById('handoverEmail');
+    if (emailInput && !emailInput.dataset.manualEdited) {
+        const sanitized = name.trim().toLowerCase().replace(/\s+/g, '.');
+        emailInput.value = sanitized ? `${sanitized}@iconpln.co.id` : '';
+    }
+}
+
+function updateTanggalTerbilangPreview(dateVal) {
+    const previewEl = document.getElementById('handoverTanggalTerbilangPreview');
+    if (!previewEl) return;
+    if (!dateVal) {
+        previewEl.textContent = '';
+        return;
+    }
+    const d = new Date(dateVal);
+    const hariArr = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const bulanArr = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const hari = hariArr[d.getDay()];
+    const tgl = d.getDate();
+    const bln = bulanArr[d.getMonth()];
+    const thn = d.getFullYear();
+    previewEl.innerHTML = `<i class="fas fa-calendar-check"></i> Hari: <strong>${hari}</strong>, ${tgl} ${bln} ${thn}`;
+}
+
+window.handleEvidentPhotoUpload = handleEvidentPhotoUpload;
+window.removeEvidentPhoto = removeEvidentPhoto;
+window.autoFillBASTEmail = autoFillBASTEmail;
+window.updateTanggalTerbilangPreview = updateTanggalTerbilangPreview;
+
 async function submitHandover(e) {
     e.preventDefault();
 
@@ -4361,6 +6039,11 @@ async function submitHandover(e) {
         lokasiBaru: document.getElementById('handoverLokasi').value,
         catatan: document.getElementById('handoverCatatan').value,
         noBeritaAcara: document.getElementById('handoverNoBA').value,
+        nip: document.getElementById('handoverNip')?.value || '',
+        email: document.getElementById('handoverEmail')?.value || '',
+        hp: document.getElementById('handoverHp')?.value || '',
+        checklist: getSelectedChecklistBAST(),
+        photos: uploadedEvidentPhotos,
         signature: signaturePad && !signaturePad.isEmpty() ? signaturePad.toDataURL() : null
     };
 
@@ -4384,6 +6067,11 @@ async function submitHandover(e) {
                 loadHandoverItemDetails();
             }
             if (signaturePad) signaturePad.clear();
+            uploadedEvidentPhotos = [];
+            renderEvidentPhotoPreviews();
+            if (typeof updateChecklistByCategory === 'function') {
+                updateChecklistByCategory('laptop');
+            }
             loadHandover();
             loadInventory();
         } else {
@@ -4571,6 +6259,7 @@ function renderHandoverTable() {
                     <td>
                         <div class="table-actions-cluster">
                             <button class="btn-action-icon btn-view" onclick="openHandoverDetailModal('${h.id}')" title="Lihat Detail BASTB & TTD"><i class="fas fa-eye"></i></button>
+                            <button class="btn-action-icon btn-edit" onclick="openEditHandoverModal('${h.id}')" title="Edit Data Serah Terima"><i class="fas fa-edit"></i></button>
                             <button class="btn-action-icon btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BASTB PDF"><i class="fas fa-file-pdf"></i></button>
                             <button class="btn-action-icon btn-excel" onclick="generateBA_excel('${h.id}')" title="Download BASTB Excel"><i class="fas fa-file-excel"></i></button>
                             <button class="btn-action-icon btn-del" onclick="deleteSingleHandover('${h.id}')" title="Hapus Data"><i class="fas fa-trash-alt"></i></button>
@@ -4651,7 +6340,14 @@ async function deleteSelectedHandover() {
         return;
     }
 
-    const confirmDelete = confirm(`Apakah Anda yakin ingin menghapus ${selectedHandoverItems.size} data?`);
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Berita Acara',
+        message: `Apakah Anda yakin ingin menghapus <strong>${selectedHandoverItems.size} berkas BAST</strong> terpilih? Dokumen serah terima ini akan dihapus dari sistem.`,
+        confirmText: 'Ya, Hapus Data',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
     if (!confirmDelete) return;
 
     isDeletingHandover = true;
@@ -4679,7 +6375,15 @@ async function deleteSelectedHandover() {
 }
 
 async function deleteSingleHandover(id) {
-    if (!confirm('Apakah Anda yakin ingin menghapus data serah terima ini?')) return;
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Berita Acara',
+        message: 'Apakah Anda yakin ingin menghapus data serah terima (BAST) ini dari sistem?',
+        confirmText: 'Ya, Hapus',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
+    if (!confirmDelete) return;
     try {
         const response = await fetch('/api/handover/bulk-delete', {
             method: 'POST',
@@ -4764,11 +6468,239 @@ function openHandoverDetailModal(id) {
         btnExcel.onclick = () => generateBA_excel(item.id);
     }
 
+    window.currentHandoverDetailId = id;
     modal.classList.add('show');
 }
 
 window.openHandoverDetailModal = openHandoverDetailModal;
 window.deleteSingleHandover = deleteSingleHandover;
+
+// ======================================================
+// EDIT HANDOVER (BAST) FUNCTIONS
+// ======================================================
+function openEditHandoverModal(id) {
+    const item = handoverData.find(h => String(h.id) === String(id));
+    if (!item) {
+        showToast('Data serah terima tidak ditemukan!', 'warning');
+        return;
+    }
+
+    // Set banner info
+    const baDisplay = document.getElementById('editHandoverBaNoDisplay');
+    if (baDisplay) baDisplay.textContent = item.no_berita_acara || 'BAST';
+
+    const itemNameElem = document.getElementById('editHandoverItemName');
+    if (itemNameElem) itemNameElem.textContent = item.item_name || 'Item';
+
+    const itemIdElem = document.getElementById('editHandoverItemId');
+    if (itemIdElem) itemIdElem.textContent = '#' + (item.item_id || '-');
+
+    const itemMerkElem = document.getElementById('editHandoverItemMerk');
+    if (itemMerkElem) itemMerkElem.textContent = item.item_merk || '-';
+
+    const itemSnElem = document.getElementById('editHandoverItemSn');
+    if (itemSnElem) itemSnElem.textContent = item.item_sn || '-';
+
+    // Set form fields
+    const idInput = document.getElementById('editHandoverId');
+    if (idInput) idInput.value = item.id;
+
+    const noBaInput = document.getElementById('editHandoverNoBa');
+    if (noBaInput) noBaInput.value = item.no_berita_acara || '';
+
+    const jenisInput = document.getElementById('editHandoverJenis');
+    if (jenisInput) jenisInput.value = item.jenis || 'Penerimaan';
+
+    const tglInput = document.getElementById('editHandoverTanggal');
+    if (tglInput) {
+        let tglVal = '';
+        if (item.tanggal_serah_terima) {
+            tglVal = item.tanggal_serah_terima.split('T')[0];
+        }
+        tglInput.value = tglVal;
+    }
+
+    const penyerahInput = document.getElementById('editHandoverPenyerah');
+    if (penyerahInput) penyerahInput.value = item.pihak_penyerah || '';
+
+    const penerimaInput = document.getElementById('editHandoverPenerima');
+    if (penerimaInput) penerimaInput.value = item.pihak_penerima || '';
+
+    const nipInput = document.getElementById('editHandoverNip');
+    if (nipInput) nipInput.value = item.nip || '';
+
+    const hpInput = document.getElementById('editHandoverHp');
+    if (hpInput) hpInput.value = item.hp || '';
+
+    const emailInput = document.getElementById('editHandoverEmail');
+    if (emailInput) emailInput.value = item.email || '';
+
+    const lokasiInput = document.getElementById('editHandoverLokasi');
+    if (lokasiInput) lokasiInput.value = item.lokasi_baru || '';
+
+    const condBeforeInput = document.getElementById('editHandoverKondisiBefore');
+    if (condBeforeInput) condBeforeInput.value = item.kondisi_before || 'Baik';
+
+    const condAfterInput = document.getElementById('editHandoverKondisiAfter');
+    if (condAfterInput) condAfterInput.value = item.kondisi_after || 'Baik';
+
+    // Inisialisasi checklist interaktif untuk Edit Modal
+    editActiveChecklistItems = [];
+    if (item.checklist) {
+        let raw = item.checklist;
+        if (typeof raw === 'string') {
+            try {
+                raw = JSON.parse(raw);
+            } catch (e) {
+                raw = raw.split(',').map(s => s.trim()).filter(Boolean);
+            }
+        }
+        if (Array.isArray(raw)) {
+            editActiveChecklistItems = raw.map(i => {
+                if (typeof i === 'object' && i !== null) {
+                    return {
+                        name: (i.name || i.label || 'Item').trim(),
+                        checked: i.checked !== false,
+                        icon: getChecklistIconByName(i.name || i.label)
+                    };
+                } else if (typeof i === 'string' && i.trim()) {
+                    return {
+                        name: i.trim(),
+                        checked: true,
+                        icon: getChecklistIconByName(i)
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+        }
+    }
+
+    // Jika checklist masih kosong, sediakan default sesuai kategori barang
+    if (editActiveChecklistItems.length === 0) {
+        const cat = (item.item_name || 'laptop').toLowerCase().trim();
+        let matched = null;
+        if (DEFAULT_CATEGORY_CHECKLIST[cat]) {
+            matched = DEFAULT_CATEGORY_CHECKLIST[cat];
+        } else {
+            for (const key of Object.keys(DEFAULT_CATEGORY_CHECKLIST)) {
+                if (cat.includes(key) || key.includes(cat)) {
+                    matched = DEFAULT_CATEGORY_CHECKLIST[key];
+                    break;
+                }
+            }
+        }
+        if (matched) {
+            editActiveChecklistItems = matched.map(i => ({ ...i }));
+        } else {
+            editActiveChecklistItems = [
+                { name: item.item_name || 'Unit Barang', checked: true, icon: 'fa-cube' },
+                { name: 'Kabel Power', checked: true, icon: 'fa-plug' },
+                { name: 'Dus', checked: false, icon: 'fa-box' }
+            ];
+        }
+    }
+
+    renderEditBASTChecklistChips();
+
+    // Inisialisasi foto evident untuk Edit Modal
+    editUploadedEvidentPhotos = [];
+    if (item.photos) {
+        if (Array.isArray(item.photos)) {
+            editUploadedEvidentPhotos = [...item.photos];
+        } else if (typeof item.photos === 'string') {
+            try {
+                const parsed = JSON.parse(item.photos);
+                if (Array.isArray(parsed)) editUploadedEvidentPhotos = parsed;
+                else if (item.photos.startsWith('data:image') || item.photos.length > 50) editUploadedEvidentPhotos = [item.photos];
+            } catch (e) {
+                if (item.photos.startsWith('data:image') || item.photos.length > 50) editUploadedEvidentPhotos = [item.photos];
+            }
+        }
+    }
+    renderEditEvidentPhotoPreviews();
+
+    const catInput = document.getElementById('editHandoverCatatan');
+    if (catInput) catInput.value = item.catatan || '';
+
+    openModal('editHandoverModal');
+}
+window.openEditHandoverModal = openEditHandoverModal;
+
+function editFromHandoverDetailModal() {
+    const id = window.currentHandoverDetailId;
+    if (!id) return;
+    closeModal('handoverDetailModal');
+    setTimeout(() => {
+        openEditHandoverModal(id);
+    }, 150);
+}
+window.editFromHandoverDetailModal = editFromHandoverDetailModal;
+
+async function saveEditHandover() {
+    const id = document.getElementById('editHandoverId')?.value;
+    if (!id) return;
+
+    // Ambil checklist terstruktur dari editActiveChecklistItems
+    const serializedChecklist = JSON.stringify(editActiveChecklistItems.map(item => ({
+        name: item.name,
+        checked: Boolean(item.checked)
+    })));
+
+    const payload = {
+        noBeritaAcara: document.getElementById('editHandoverNoBa')?.value?.trim() || '',
+        jenis: document.getElementById('editHandoverJenis')?.value || 'Penerimaan',
+        tanggalSerahTerima: document.getElementById('editHandoverTanggal')?.value || '',
+        pihakPenyerah: document.getElementById('editHandoverPenyerah')?.value?.trim() || '',
+        pihakPenerima: document.getElementById('editHandoverPenerima')?.value?.trim() || '',
+        nip: document.getElementById('editHandoverNip')?.value?.trim() || '',
+        hp: document.getElementById('editHandoverHp')?.value?.trim() || '',
+        email: document.getElementById('editHandoverEmail')?.value?.trim() || '',
+        lokasiBaru: document.getElementById('editHandoverLokasi')?.value?.trim() || '',
+        kondisiBefore: document.getElementById('editHandoverKondisiBefore')?.value || 'Baik',
+        kondisiAfter: document.getElementById('editHandoverKondisiAfter')?.value || 'Baik',
+        checklist: serializedChecklist,
+        photos: editUploadedEvidentPhotos,
+        catatan: document.getElementById('editHandoverCatatan')?.value?.trim() || ''
+    };
+
+    if (!payload.noBeritaAcara || !payload.pihakPenyerah || !payload.pihakPenerima) {
+        showToast('Nomor BA, Pihak Penyerah, dan Pihak Penerima wajib diisi!', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/handover/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const resData = await response.json();
+        if (response.ok && resData.success) {
+            closeModal('editHandoverModal');
+            showToast('Data serah terima berhasil diperbarui!', 'success');
+
+            // Refresh local handover data & table
+            if (typeof loadHandover === 'function') {
+                await loadHandover();
+            } else if (typeof updateHandoverTable === 'function') {
+                updateHandoverTable();
+            }
+            if (typeof loadInventoryData === 'function') {
+                loadInventoryData();
+            }
+            if (typeof renderDashboardMap === 'function') {
+                renderDashboardMap();
+            }
+        } else {
+            showToast(resData.error || 'Gagal memperbarui data serah terima', 'error');
+        }
+    } catch (err) {
+        console.error('Save edit handover error:', err);
+        showToast('Terjadi kesalahan saat menyimpan perubahan serah terima', 'error');
+    }
+}
+window.saveEditHandover = saveEditHandover;
 
 function formatTanggalIndonesia(dateStr, includeTime) {
     if (!dateStr) return '-';
@@ -4822,193 +6754,20 @@ function generateNomorBA(tanggal, id) {
 }
 
 function generateBA_pdf(id) {
-    const data = handoverData.find(h => h.id == id);
-    if (!data) {
-        showToast('Data tidak ditemukan!', true);
+    if (!id) {
+        showToast('ID Berita Acara tidak valid!', true);
         return;
     }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const centerX = pageWidth / 2;
-    const margin = 20;
-    const marginRight = pageWidth - margin;
-    const tableWidth = pageWidth - (margin * 2);
-
-    const nomorBA = data.no_berita_acara || generateNomorBA(data.tanggal_serah_terima, data.id);
-    const tglFormat = formatTanggalIndonesia(data.tanggal_serah_terima);
-
-    // 1. HEADER: Logo & Nomor Dokumen
-    try {
-        doc.addImage('img/logo1.png', 'PNG', margin, 10, 35, 12);
-    } catch (e) {
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(79, 70, 229);
-        doc.text('ICONNET', margin, 18);
-    }
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(79, 70, 229);
-    doc.text('No. Berita Acara:', marginRight, 15, { align: 'right' });
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(30, 41, 59);
-    doc.text(nomorBA, marginRight, 20, { align: 'right' });
-
-    // 2. JUDUL
-    let y = 40;
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text('BERITA ACARA SERAH TERIMA BARANG', centerX, y, { align: 'center' });
-
-    y += 5;
-    doc.setDrawColor(79, 70, 229);
-    doc.setLineWidth(0.8);
-    doc.line(margin, y, marginRight, y);
-
-    // 3. KALIMAT PEMBUKA
-    y += 15;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-
-    const openingText = `Bahwa pada hari ini, ${tglFormat}, kami yang bertanda tangan di bawah ini telah melaksanakan serah terima aset/barang inventaris dengan rincian informasi sebagai berikut:`;
-    const splitOpening = doc.splitTextToSize(openingText, tableWidth);
-    doc.text(splitOpening, margin, y);
-
-    // 4. TABEL DETAIL BARANG
-    y += (splitOpening.length * 5) + 5;
-    doc.autoTable({
-        startY: y,
-        head: [['Deskripsi Informasi', 'Detail Aset / Barang']],
-        body: [
-            ['ID Inventaris', data.item_id || '-'],
-            ['Nama Barang', data.item_name || '-'],
-            ['Merk / Model', data.item_merk || '-'],
-            ['Serial Number (SN)', data.item_sn || '-'],
-            ['Kategori / Jenis', data.jenis || '-'],
-            ['Kondisi Awal (Penyerah)', data.kondisi_before || '-'],
-            ['Kondisi Akhir (Penerima)', data.kondisi_after || '-'],
-            ['Lokasi Penempatan', data.lokasi_baru || '-']
-        ],
-        margin: { left: margin, right: margin },
-        theme: 'grid',
-        headStyles: {
-            fillColor: [30, 41, 59],
-            textColor: 255,
-            fontStyle: 'bold',
-            fontSize: 10,
-            halign: 'left',
-            cellPadding: 4
-        },
-        bodyStyles: {
-            fontSize: 9.5,
-            textColor: [51, 65, 85],
-            cellPadding: 4,
-            lineColor: [226, 232, 240]
-        },
-        columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: tableWidth * 0.35, fillColor: [248, 250, 252] },
-            1: { cellWidth: tableWidth * 0.65 }
-        },
-        styles: {
-            valign: 'middle',
-            overflow: 'linebreak'
-        }
-    });
-
-    // 5. TANDA TANGAN
-    y = doc.lastAutoTable.finalY + 20;
-
-    // Check if y is too low, add page if necessary
-    if (y > pageHeight - 60) {
-        doc.addPage();
-        y = 20;
-    }
-
-    const colWidth = tableWidth / 2;
-    const col1X = margin + (colWidth / 2);
-    const col2X = marginRight - (colWidth / 2);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 41, 59);
-
-    doc.text('Pihak Penyerah,', col1X, y, { align: 'center' });
-    doc.text('Pihak Penerima,', col2X, y, { align: 'center' });
-
-    // 5.1 SIGNATURE IMAGE
-    if (data.signature) {
-        try {
-            // Draw signature for Penyerah only (as per user request)
-            doc.addImage(data.signature, 'PNG', col1X - 15, y + 2, 30, 15);
-        } catch (e) {
-            console.error('Error adding signature to PDF:', e);
-        }
-    }
-
-    y += 25; // Space for signature
-
-    // Names with Underline
-    doc.setFont('helvetica', 'bold');
-
-    const namePenyerah = data.pihak_penyerah || '............................';
-    const namePenerima = data.pihak_penerima || '............................';
-
-    doc.text(namePenyerah, col1X, y, { align: 'center' });
-    doc.text(namePenerima, col2X, y, { align: 'center' });
-
-    // Drawing Underline
-    const nameWidth1 = doc.getTextWidth(namePenyerah);
-    const nameWidth2 = doc.getTextWidth(namePenerima);
-
-    doc.setLineWidth(0.3);
-    doc.setDrawColor(30, 41, 59);
-    doc.line(col1X - (nameWidth1 / 2), y + 1, col1X + (nameWidth1 / 2), y + 1);
-    doc.line(col2X - (nameWidth2 / 2), y + 1, col2X + (nameWidth2 / 2), y + 1);
-
-    // Mengetahui
-    y += 15;
-    doc.setFont('helvetica', 'normal');
-    doc.text('Mengetahui / Menyetujui,', centerX, y, { align: 'center' });
-
-    y += 25;
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(79, 70, 229);
-    doc.text('...................................', centerX, y, { align: 'center' });
-
-    const mgmtWidth = doc.getTextWidth('...................................');
-    doc.setDrawColor(79, 70, 229);
-    doc.line(centerX - (mgmtWidth / 2), y + 1, centerX + (mgmtWidth / 2), y + 1);
-
-    // 6. CATATAN (IF ANY)
-    if (data.catatan) {
-        y += 15;
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(8.5);
-        doc.setFont('helvetica', 'italic');
-        const catatanLines = doc.splitTextToSize('Catatan: ' + data.catatan, tableWidth);
-        doc.text(catatanLines, margin, y);
-    }
-
-    // 7. FOOTER: Page Number & Date
-    const totalPages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text(`Halaman ${i} dari ${totalPages}`, centerX, pageHeight - 10, { align: 'center' });
-        doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, margin, pageHeight - 10);
-    }
-
-    const fileName = `BA_SERAH_TERIMA_${data.item_id || 'ITEM'}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-    showToast('Berita Acara PDF berhasil diunduh!');
+    showToast('Menyiapkan Berita Acara Serah Terima (BAST) resmi...');
+    const token = encodeURIComponent(sessionStorage.getItem('authToken') || '');
+    const downloadUrl = `/api/handover/${id}/pdf?token=${token}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.target = '_blank';
+    link.setAttribute('download', `BAST_${id}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 async function generateBA_excel(id) {
@@ -5512,23 +7271,24 @@ let apexDistChart = null;
 let apexCondChart = null;
 
 function initCharts() {
-    const theme = document.body.getAttribute('data-theme') || localStorage.getItem('theme') || 'dark';
-    const isDark = theme === 'dark';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        document.body.getAttribute('data-theme') === 'dark' ||
+        localStorage.getItem('theme') === 'dark';
     const textColor = isDark ? '#cbd5e1' : '#334155';
-    const bgCutout = isDark ? '#0f172a' : '#ffffff';
+    const bgCutout = isDark ? '#1e293b' : '#ffffff';
 
     // 1. Check if ApexCharts is available
     if (typeof ApexCharts !== 'undefined' && document.getElementById('inventoryDistChartApex')) {
         const distEl = document.getElementById('inventoryDistChartApex');
-        const condEl = document.getElementById('conditionChartApex');
 
         if (distEl && !apexDistChart) {
             const distOptions = {
                 chart: {
                     type: 'donut',
-                    height: 310,
+                    height: 290,
                     fontFamily: "'Plus Jakarta Sans', sans-serif",
                     toolbar: { show: false },
+                    foreColor: textColor,
                     animations: {
                         enabled: true,
                         easing: 'easeinout',
@@ -5537,7 +7297,7 @@ function initCharts() {
                 },
                 series: [1],
                 labels: ['Memuat...'],
-                colors: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#f43f5e'],
+                colors: ['#2563eb', '#10b981', '#7c3aed', '#0891b2', '#db2777', '#d97706'],
                 stroke: {
                     width: 3,
                     colors: [bgCutout]
@@ -5545,18 +7305,19 @@ function initCharts() {
                 plotOptions: {
                     pie: {
                         donut: {
-                            size: '70%',
+                            size: '72%',
                             labels: {
                                 show: true,
                                 name: {
                                     show: true,
                                     fontSize: '12px',
-                                    color: textColor,
+                                    fontWeight: 600,
+                                    color: isDark ? '#94a3b8' : '#475569',
                                     offsetY: -4
                                 },
                                 value: {
                                     show: true,
-                                    fontSize: '22px',
+                                    fontSize: '24px',
                                     fontFamily: "'Outfit', sans-serif",
                                     fontWeight: 800,
                                     color: isDark ? '#f8fafc' : '#0f172a',
@@ -5566,9 +7327,9 @@ function initCharts() {
                                 total: {
                                     show: true,
                                     label: 'Total Aset',
-                                    color: textColor,
-                                    fontSize: '12px',
-                                    fontWeight: 600,
+                                    color: isDark ? '#cbd5e1' : '#334155',
+                                    fontSize: '12.5px',
+                                    fontWeight: 700,
                                     formatter: w => {
                                         return w.globals.seriesTotals.reduce((a, b) => a + b, 0) + ' Unit';
                                     }
@@ -5582,8 +7343,12 @@ function initCharts() {
                     position: 'bottom',
                     fontSize: '12px',
                     fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    fontWeight: 600,
                     labels: { colors: textColor },
-                    itemMargin: { horizontal: 6, vertical: 4 }
+                    itemMargin: { horizontal: 8, vertical: 4 },
+                    formatter: function(seriesName, opts) {
+                        return seriesName + ' (' + opts.w.globals.series[opts.seriesIndex] + ')';
+                    }
                 },
                 tooltip: {
                     theme: isDark ? 'dark' : 'light',
@@ -5594,91 +7359,17 @@ function initCharts() {
             apexDistChart.render();
         }
 
-        if (condEl && !apexCondChart) {
-            const condOptions = {
-                chart: {
-                    type: 'bar',
-                    height: 310,
-                    fontFamily: "'Plus Jakarta Sans', sans-serif",
-                    toolbar: { show: false },
-                    animations: {
-                        enabled: true,
-                        easing: 'easeinout',
-                        speed: 700
-                    }
-                },
-                series: [{
-                    name: 'Jumlah Aset',
-                    data: [0, 0, 0]
-                }],
-                colors: ['#10b981', '#f59e0b', '#ef4444'],
-                plotOptions: {
-                    bar: {
-                        columnWidth: '38%',
-                        borderRadius: 8,
-                        borderRadiusApplication: 'end',
-                        distributed: true,
-                        dataLabels: { position: 'top' }
-                    }
-                },
-                dataLabels: {
-                    enabled: true,
-                    formatter: val => val,
-                    offsetY: -20,
-                    style: {
-                        fontSize: '13px',
-                        fontFamily: "'Outfit', sans-serif",
-                        fontWeight: 700,
-                        colors: [isDark ? '#f8fafc' : '#0f172a']
-                    }
-                },
-                legend: { show: false },
-                grid: {
-                    strokeDashArray: 4,
-                    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
-                },
-                xaxis: {
-                    categories: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
-                    labels: {
-                        style: {
-                            fontFamily: "'Plus Jakarta Sans', sans-serif",
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            colors: [textColor, textColor, textColor]
-                        }
-                    },
-                    axisBorder: { show: false },
-                    axisTicks: { show: false }
-                },
-                yaxis: {
-                    labels: {
-                        style: {
-                            fontFamily: "'Plus Jakarta Sans', sans-serif",
-                            fontSize: '11px',
-                            colors: [textColor]
-                        }
-                    }
-                },
-                tooltip: {
-                    theme: isDark ? 'dark' : 'light',
-                    y: { formatter: val => val + ' Unit' }
-                }
-            };
-            apexCondChart = new ApexCharts(condEl, condOptions);
-            apexCondChart.render();
-        }
+        // Initialize Health Index progress bars
+        updateChartsData();
         return;
     }
 
     // 2. Chart.js Fallback
     const distCanvas = document.getElementById('inventoryDistChart');
-    const condCanvas = document.getElementById('conditionChart');
-    if (!distCanvas || !condCanvas) return;
+    if (!distCanvas) return;
     distCanvas.style.display = 'block';
-    condCanvas.style.display = 'block';
 
     const distCtx = distCanvas.getContext('2d');
-    const condCtx = condCanvas.getContext('2d');
 
     if (!inventoryDistChart) {
         inventoryDistChart = new Chart(distCtx, {
@@ -5687,7 +7378,7 @@ function initCharts() {
                 labels: [],
                 datasets: [{
                     data: [],
-                    backgroundColor: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'],
+                    backgroundColor: ['#2563eb', '#10b981', '#7c3aed', '#0891b2', '#db2777', '#d97706'],
                     borderWidth: 2,
                     borderColor: bgCutout
                 }]
@@ -5698,51 +7389,23 @@ function initCharts() {
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { color: textColor }
+                        labels: { color: textColor, font: { weight: '600' } }
                     }
                 }
             }
         });
     }
 
-    if (!conditionChart) {
-        conditionChart = new Chart(condCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Baik', 'Rusak Ringan', 'Rusak Berat'],
-                datasets: [{
-                    label: 'Status Kondisi',
-                    data: [0, 0, 0],
-                    backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-                    borderRadius: 8
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { color: textColor },
-                        grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }
-                    },
-                    x: {
-                        ticks: { color: textColor },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: { display: false }
-                }
-            }
-        });
-    }
+    updateChartsData();
 }
 
 function updateChartsData() {
     if (!inventoryData || inventoryData.length === 0) return;
-    const theme = document.body.getAttribute('data-theme') || localStorage.getItem('theme') || 'dark';
-    const isDark = theme === 'dark';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        document.body.getAttribute('data-theme') === 'dark' ||
+        localStorage.getItem('theme') === 'dark';
+    const textColor = isDark ? '#cbd5e1' : '#334155';
+    const bgCutout = isDark ? '#1e293b' : '#ffffff';
 
     // 1. Calculate Distribution Counts
     const dist = {};
@@ -5754,7 +7417,20 @@ function updateChartsData() {
     const distLabels = Object.keys(dist);
     const distSeries = Object.values(dist);
 
-    // 2. Calculate Condition Counts
+    // Dynamic smart colors matching category palette
+    const distColors = distLabels.map(label => {
+        if (typeof getCategoryBadgeStyle === 'function') {
+            const style = getCategoryBadgeStyle(label);
+            if (style) return isDark ? style.dark.color : style.light.color;
+        }
+        return '#2563eb';
+    });
+
+    // Update total badge
+    const totalBadge = document.getElementById('distTotalBadge');
+    if (totalBadge) totalBadge.textContent = `${inventoryData.length} Unit`;
+
+    // 2. Calculate Condition Counts for Health Index (Opsi A)
     const cond = { 'Baik': 0, 'Rusak Ringan': 0, 'Rusak Berat': 0 };
     inventoryData.forEach(item => {
         const kAfter = (item.kondisiAfter || item.kondisi_after || '').trim();
@@ -5764,40 +7440,115 @@ function updateChartsData() {
         else cond['Baik']++;
     });
 
-    const condSeries = [cond['Baik'], cond['Rusak Ringan'], cond['Rusak Berat']];
+    const totalAset = inventoryData.length;
+    const countBaik = cond['Baik'];
+    const countRusakRingan = cond['Rusak Ringan'];
+    const countRusakBerat = cond['Rusak Berat'];
 
-    // 3. Update ApexCharts if active
-    if (apexDistChart && apexCondChart) {
+    const pctBaik = totalAset > 0 ? Math.round((countBaik / totalAset) * 100) : 100;
+    const pctRusakRingan = totalAset > 0 ? Math.round((countRusakRingan / totalAset) * 100) : 0;
+    const pctRusakBerat = totalAset > 0 ? Math.round((countRusakBerat / totalAset) * 100) : 0;
+
+    // Update Health Score UI elements
+    const healthScoreBig = document.getElementById('healthScoreBig');
+    const healthScoreDesc = document.getElementById('healthScoreDesc');
+    const healthRateStatus = document.getElementById('healthRateStatus');
+    const healthRatePill = document.getElementById('healthRatePill');
+
+    if (healthScoreBig) healthScoreBig.textContent = `${pctBaik}%`;
+    if (healthRateStatus) healthRateStatus.textContent = `${pctBaik}% Siap Pakai`;
+
+    if (healthScoreDesc) {
+        if (pctBaik === 100) {
+            healthScoreDesc.textContent = 'Semua aset terdata dalam kondisi prima dan siap digunakan di operasional.';
+            if (healthScoreBig) healthScoreBig.style.color = '#10b981';
+            if (healthRatePill) {
+                healthRatePill.style.background = 'rgba(16, 185, 129, 0.12)';
+                healthRatePill.style.color = '#10b981';
+                healthRatePill.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+            }
+        } else if (pctBaik >= 80) {
+            healthScoreDesc.textContent = `${countRusakRingan + countRusakBerat} unit memerlukan perhatian atau pemeliharaan berkala.`;
+            if (healthScoreBig) healthScoreBig.style.color = '#f59e0b';
+            if (healthRatePill) {
+                healthRatePill.style.background = 'rgba(245, 158, 11, 0.12)';
+                healthRatePill.style.color = '#f59e0b';
+                healthRatePill.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+            }
+        } else {
+            healthScoreDesc.textContent = 'Perhatian: Terdapat unit dalam kondisi rusak yang memerlukan perbaikan segera.';
+            if (healthScoreBig) healthScoreBig.style.color = '#ef4444';
+            if (healthRatePill) {
+                healthRatePill.style.background = 'rgba(239, 68, 68, 0.12)';
+                healthRatePill.style.color = '#ef4444';
+                healthRatePill.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            }
+        }
+    }
+
+    // Update Progress Bars
+    const hBaikVal = document.getElementById('healthBaikVal');
+    const hBarBaik = document.getElementById('healthBarBaik');
+    if (hBaikVal) hBaikVal.textContent = `${countBaik} Unit (${pctBaik}%)`;
+    if (hBarBaik) hBarBaik.style.width = `${pctBaik}%`;
+
+    const hRusakRinganVal = document.getElementById('healthRusakRinganVal');
+    const hBarRusakRingan = document.getElementById('healthBarRusakRingan');
+    if (hRusakRinganVal) hRusakRinganVal.textContent = `${countRusakRingan} Unit (${pctRusakRingan}%)`;
+    if (hBarRusakRingan) hBarRusakRingan.style.width = `${pctRusakRingan}%`;
+
+    const hRusakBeratVal = document.getElementById('healthRusakBeratVal');
+    const hBarRusakBerat = document.getElementById('healthBarRusakBerat');
+    if (hRusakBeratVal) hRusakBeratVal.textContent = `${countRusakBerat} Unit (${pctRusakBerat}%)`;
+    if (hBarRusakBerat) hBarRusakBerat.style.width = `${pctRusakBerat}%`;
+
+    // Update Mini Metrics
+    const mTotal = document.getElementById('healthMetricTotal');
+    const mIssue = document.getElementById('healthMetricIssue');
+    const mAudit = document.getElementById('healthMetricAudit');
+
+    if (mTotal) mTotal.textContent = totalAset;
+    if (mIssue) mIssue.textContent = countRusakRingan + countRusakBerat;
+
+    const checkedCount = inventoryData.filter(i => i.checklist === 'Ya').length;
+    const pctAudit = totalAset > 0 ? Math.round((checkedCount / totalAset) * 100) : 0;
+    if (mAudit) mAudit.textContent = `${pctAudit}% (${checkedCount}/${totalAset})`;
+
+    // 3. Update ApexCharts Donut if active
+    if (apexDistChart) {
         apexDistChart.updateOptions({
             labels: distLabels,
             series: distSeries,
+            colors: distColors.length > 0 ? distColors : ['#2563eb', '#10b981'],
             stroke: {
-                colors: [isDark ? '#0f172a' : '#ffffff']
+                colors: [bgCutout]
+            },
+            legend: {
+                labels: { colors: textColor }
+            },
+            plotOptions: {
+                pie: {
+                    donut: {
+                        labels: {
+                            name: { color: isDark ? '#94a3b8' : '#475569' },
+                            value: { color: isDark ? '#f8fafc' : '#0f172a' },
+                            total: { color: isDark ? '#cbd5e1' : '#334155' }
+                        }
+                    }
+                }
             },
             tooltip: { theme: isDark ? 'dark' : 'light' }
         });
-
-        apexCondChart.updateOptions({
-            series: [{
-                name: 'Jumlah Aset',
-                data: condSeries
-            }],
-            tooltip: { theme: isDark ? 'dark' : 'light' }
-        });
-        return;
     }
 
     // 4. Update Chart.js if active
-    if (inventoryDistChart && conditionChart) {
+    if (inventoryDistChart) {
         inventoryDistChart.data.labels = distLabels;
         inventoryDistChart.data.datasets[0].data = distSeries;
+        inventoryDistChart.data.datasets[0].backgroundColor = distColors;
+        inventoryDistChart.data.datasets[0].borderColor = bgCutout;
+        inventoryDistChart.options.plugins.legend.labels.color = textColor;
         inventoryDistChart.update();
-
-        conditionChart.data.datasets[0].data = condSeries;
-        conditionChart.update();
-    } else {
-        initCharts();
-        setTimeout(updateChartsData, 100);
     }
 }
 
@@ -5961,6 +7712,120 @@ function getSortedCubicleList() {
     return [...new Set(validCubicles)];
 }
 
+function renderCubiclePickerQuickChips() {
+    const wrap = document.getElementById('cubiclePickerQuickOptions');
+    if (!wrap) return;
+
+    const customRooms = (cubiclePositions || [])
+        .filter(p => p.type === 'room')
+        .map(p => p.cubicle_id);
+
+    const standardChips = ['-', 'Gudang', 'Ruang Server'];
+    const allChips = [...new Set([...standardChips, ...customRooms])];
+
+    wrap.innerHTML = allChips.map(chip => {
+        let icon = 'fa-building';
+        if (chip === '-') icon = 'fa-minus-circle';
+        else if (chip.toLowerCase().includes('gudang')) icon = 'fa-warehouse';
+        else if (chip.toLowerCase().includes('server')) icon = 'fa-server';
+        else if (chip.toLowerCase().includes('meeting') || chip.toLowerCase().includes('rapat')) icon = 'fa-users';
+        else if (chip.toLowerCase().includes('noc')) icon = 'fa-network-wired';
+
+        const label = chip === '-' ? 'Tanpa Kubikel (-)' : chip;
+        return `
+            <button type="button" class="cubicle-badge-chip" onclick="selectCubicleForTarget('${chip}')">
+                <i class="fas ${icon}"></i> ${label}
+            </button>
+        `;
+    }).join('');
+}
+
+function toggleAddNewLocationForm(forceShow) {
+    const wrap = document.getElementById('addNewLocationWrap');
+    if (!wrap) return;
+    const isShowing = wrap.style.display !== 'none';
+    const shouldShow = forceShow !== undefined ? forceShow : !isShowing;
+
+    wrap.style.display = shouldShow ? 'block' : 'none';
+    if (shouldShow) {
+        const input = document.getElementById('newLocationNameInput');
+        if (input) {
+            input.value = (document.getElementById('cubiclePickerSearch')?.value || '').trim();
+            input.focus();
+        }
+    }
+}
+
+async function submitAddNewLocation() {
+    const nameInput = document.getElementById('newLocationNameInput');
+    const typeSelect = document.getElementById('newLocationTypeSelect');
+    if (!nameInput || !nameInput.value.trim()) {
+        showToast('Nama lokasi wajib diisi', 'error');
+        return;
+    }
+
+    const name = nameInput.value.trim();
+    const type = typeSelect ? typeSelect.value : 'cubicle';
+
+    try {
+        const res = await fetch('/api/cubicle-positions/add-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, type })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            const newLoc = data.location;
+            if (!cubiclePositions.find(p => p.cubicle_id === newLoc.cubicle_id)) {
+                cubiclePositions.push(newLoc);
+            }
+            populateCubicleSuggestions();
+            renderCubiclePickerQuickChips();
+            toggleAddNewLocationForm(false);
+            selectCubicleForTarget(newLoc.cubicle_id);
+            showToast(`Lokasi "${newLoc.cubicle_id}" berhasil didaftarkan dan dipilih!`);
+            if (typeof renderDesigner === 'function') renderDesigner();
+        } else {
+            showToast(data.message || 'Gagal menambahkan lokasi', 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
+async function quickAddLocationFromSearch(queryName) {
+    if (!queryName || !queryName.trim()) return;
+    const name = queryName.trim();
+    const isCubicleFormat = /^[a-zA-Z]-?[0-9]+$/i.test(name) || /^[a-zA-Z][0-9]+$/i.test(name);
+    const type = isCubicleFormat ? 'cubicle' : 'room';
+
+    try {
+        const res = await fetch('/api/cubicle-positions/add-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, type })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            const newLoc = data.location;
+            if (!cubiclePositions.find(p => p.cubicle_id === newLoc.cubicle_id)) {
+                cubiclePositions.push(newLoc);
+            }
+            populateCubicleSuggestions();
+            renderCubiclePickerQuickChips();
+            selectCubicleForTarget(newLoc.cubicle_id);
+            showToast(`Lokasi "${newLoc.cubicle_id}" berhasil didaftarkan dan dipilih!`);
+            if (typeof renderDesigner === 'function') renderDesigner();
+        } else {
+            showToast(data.message || 'Gagal menambahkan lokasi', 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
 function openCubiclePicker(targetInputId = 'itemLocation') {
     cubiclePickerTargetInput = targetInputId;
     cachedCubiclesList = getSortedCubicleList();
@@ -5968,6 +7833,8 @@ function openCubiclePicker(targetInputId = 'itemLocation') {
     const searchInput = document.getElementById('cubiclePickerSearch');
     if (searchInput) searchInput.value = '';
 
+    toggleAddNewLocationForm(false);
+    renderCubiclePickerQuickChips();
     renderCubiclePickerGrid(cachedCubiclesList);
     openModal('cubiclePickerModal');
 
@@ -5976,12 +7843,23 @@ function openCubiclePicker(targetInputId = 'itemLocation') {
     }, 200);
 }
 
-function renderCubiclePickerGrid(cubicles) {
+function renderCubiclePickerGrid(cubicles, currentQuery = '') {
     const grid = document.getElementById('cubiclePickerGrid');
     if (!grid) return;
 
     if (!cubicles || cubicles.length === 0) {
-        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-tertiary); padding: 20px;">Tidak ada kubikel yang cocok</div>';
+        if (currentQuery) {
+            grid.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; padding: 22px 14px; background: var(--bg-secondary); border: 1.5px dashed var(--border); border-radius: 10px;">
+                    <p style="margin: 0 0 10px; font-size: 13px; color: var(--text-secondary);">Lokasi "<strong>${currentQuery}</strong>" belum terdaftar di sistem.</p>
+                    <button type="button" class="primary-btn" onclick="quickAddLocationFromSearch('${currentQuery}')" style="padding: 8px 16px; border-radius: 6px; font-size: 12px; margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                        <i class="fas fa-plus-circle"></i> Daftarkan "${currentQuery.toUpperCase()}" & Pilih
+                    </button>
+                </div>
+            `;
+        } else {
+            grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--text-tertiary); padding: 20px;">Tidak ada kubikel yang cocok</div>';
+        }
         return;
     }
 
@@ -5997,7 +7875,7 @@ function filterCubiclePicker(query) {
         return;
     }
     const filtered = cachedCubiclesList.filter(id => id.toLowerCase().includes(q));
-    renderCubiclePickerGrid(filtered);
+    renderCubiclePickerGrid(filtered, query.trim());
 }
 
 function selectCubicleForTarget(val) {
@@ -6036,52 +7914,475 @@ async function renderMap() {
     }
 }
 
+// ==========================================================================
+// MODERN ENTERPRISE INTERACTIVE MAP VIEW ENGINE (Stop-Slop Suite)
+// ==========================================================================
+let mapViewState = {
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    isDragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    currentFilter: 'all',
+    currentZone: 'all',
+    hasUserInteracted: false,
+    stageBounds: { minX: 0, maxX: 1200, minY: 0, maxY: 1600 },
+    isSidebarCollapsed: false
+};
+
 function renderNormalView() {
-    const mapContainer = document.getElementById('officeMap');
+    const stage = document.getElementById('officeMapStage') || document.getElementById('officeMap');
     const poolContainer = document.getElementById('unassignedPool');
-    if (!mapContainer || !poolContainer) return;
+    const viewport = document.getElementById('officeMapViewport');
+    if (!stage || !poolContainer) return;
 
+    // 1. Render Pool Sidebar (Unassigned Items)
     const unassigned = inventoryData.filter(item => !getCubicleId(item));
-    poolContainer.innerHTML = unassigned.map(item => `
-        <div class="pool-item" draggable="true" ondragstart="dragItemToMap(event, '${item.id}')">
-            <h4>${item.name}</h4>
-            <p>${item.merk || '-'} | SN: ${item.sn || '-'}${item.snConverter ? ` | Conv: ${item.snConverter}` : ''}</p>
-            <p style="font-size: 10px; opacity: 0.7; margin-top: 2px;"><i class="fas fa-map-marker-alt"></i> ${item.lokasi || '-'}</p>
-        </div>
-    `).join('') || '<p class="text-center p-3 text-secondary">Tidak ada barang tersedia</p>';
+    const poolCountBadge = document.getElementById('poolCountBadge');
+    const poolToggleText = document.getElementById('poolToggleText');
+    if (poolCountBadge) poolCountBadge.textContent = unassigned.length;
+    if (poolToggleText) poolToggleText.textContent = `Barang (${unassigned.length})`;
 
-    mapContainer.innerHTML = '';
-    cubiclePositions.forEach(pos => {
+    if (unassigned.length === 0) {
+        poolContainer.innerHTML = `
+            <div style="text-align: center; padding: 30px 15px; color: var(--text-secondary);">
+                <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(16, 185, 129, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; color: #10b981;">
+                    <i class="fas fa-check-circle" style="font-size: 22px;"></i>
+                </div>
+                <p style="font-size: 12.5px; font-weight: 700; color: var(--text-primary); margin: 0 0 4px;">Semua Aset Terpetakan</p>
+                <p style="font-size: 10.5px; color: var(--text-tertiary); margin: 0 0 12px; line-height: 1.4;">Tidak ada barang menganggur tanpa lokasi meja.</p>
+                <button type="button" class="btn-sm primary-btn" onclick="navigateTo('input')" style="font-size: 11px; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; margin: 0 auto;">
+                    <i class="fas fa-plus"></i> Tambah Inventaris
+                </button>
+            </div>
+        `;
+    } else {
+        poolContainer.innerHTML = unassigned.map(item => `
+            <div class="pool-item" draggable="true" ondragstart="dragItemToMap(event, '${item.id}')" title="Tarik ke kubikel di denah untuk menugaskan">
+                <h4>
+                    <span>${item.name}</span>
+                    <span style="font-size: 9px; color: var(--primary); background: rgba(37,99,235,0.1); padding: 1px 5px; border-radius: 4px;">${item.kategori || 'Aset'}</span>
+                </h4>
+                <p><i class="fas fa-tag" style="font-size: 9px; opacity: 0.7;"></i> ${item.merk || '-'} • SN: <strong>${item.sn || '-'}</strong></p>
+                <p style="font-size: 9.5px; color: var(--text-tertiary); margin-top: 2px;"><i class="fas fa-map-marker-alt"></i> ${item.lokasi || 'Tanpa Lokasi'}</p>
+            </div>
+        `).join('');
+    }
+
+    // 2. Render Office Map Stage
+    stage.innerHTML = '';
+    const validPositions = (cubiclePositions || []).filter(p => (p.x > 0 || p.y > 0));
+
+    if (validPositions.length === 0) {
+        stage.innerHTML = `
+            <div class="empty-state mini" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;">
+                <i class="fas fa-map-marked-alt" style="font-size: 32px; color: var(--text-tertiary); margin-bottom: 8px;"></i>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Belum ada denah yang diletakkan di kanvas</p>
+                <a href="#map-designer" style="font-size: 11px; color: var(--primary); text-decoration: underline; margin-top: 4px; display: inline-block;">Atur Tata Letak di Designer</a>
+            </div>
+        `;
+        updateMapViewCounters(0, 0, 0, 0);
+        return;
+    }
+
+    // Calculate Bounding Box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    validPositions.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
+
+    mapViewState.stageBounds = { minX, maxX, minY, maxY };
+
+    // Group items by cluster/block for island pod cards
+    const clusterMap = {};
+    let totalOccupied = 0;
+    let totalVacant = 0;
+    let totalRooms = 0;
+    let totalAll = 0;
+
+    validPositions.forEach(pos => {
+        const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        if (isLabel) return;
+
+        totalAll++;
+        const isRoom = pos.type === 'room' || (pos.cubicle_id && (pos.cubicle_id.toUpperCase().includes('LOBBY') || pos.cubicle_id.toUpperCase().includes('NOC') || pos.cubicle_id.toUpperCase().includes('SERVER') || pos.cubicle_id.toUpperCase().includes('MEETING')));
+        if (isRoom) {
+            totalRooms++;
+        }
+
+        const items = inventoryData.filter(inv => getCubicleId(inv) === pos.cubicle_id);
+        if (items.length > 0) totalOccupied++;
+        else if (!isRoom) totalVacant++;
+
+        if (!isRoom) {
+            const block = (pos.cubicle_id.split('-')[0] || '').trim().toUpperCase();
+            if (block && block.length === 1 && block >= 'A' && block <= 'Z') {
+                if (!clusterMap[block]) clusterMap[block] = [];
+                clusterMap[block].push(pos);
+            }
+        }
+    });
+
+    updateMapViewCounters(totalAll, totalOccupied, totalVacant, totalRooms);
+
+    // 2A. Render Cluster Pod Cards (Island Enclosures)
+    Object.keys(clusterMap).sort().forEach(block => {
+        const nodes = clusterMap[block];
+        if (nodes.length >= 2) {
+            let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMaxY = -Infinity;
+            nodes.forEach(n => {
+                if (n.x < bMinX) bMinX = n.x;
+                if (n.x > bMaxX) bMaxX = n.x;
+                if (n.y < bMinY) bMinY = n.y;
+                if (n.y > bMaxY) bMaxY = n.y;
+            });
+
+            const podCard = document.createElement('div');
+            podCard.className = `cluster-pod-card pod-block-${block}`;
+            podCard.style.left = `${bMinX - 16}px`;
+            podCard.style.top = `${bMinY - 26}px`;
+            podCard.style.width = `${(bMaxX - bMinX) + 84}px`;
+            podCard.style.height = `${(bMaxY - bMinY) + 88}px`;
+
+            podCard.innerHTML = `
+                <div class="pod-header">
+                    <span class="pod-dot"></span>
+                    <span>Kluster ${block}</span>
+                    <span class="pod-badge">(${nodes.length} Meja)</span>
+                </div>
+            `;
+            stage.appendChild(podCard);
+        }
+    });
+
+    // 2B. Render Desks & Rooms
+    validPositions.forEach(pos => {
         const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
         if (isLabel) {
             const div = document.createElement('div');
-            div.className = 'view-label';
+            div.className = 'view-label mini';
             div.style.left = `${pos.x}px`;
             div.style.top = `${pos.y}px`;
+            div.style.fontSize = '9px';
+            div.style.padding = '3px 8px';
+            div.style.borderRadius = '6px';
+            div.style.background = 'rgba(16, 185, 129, 0.12)';
+            div.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+            div.style.color = '#34d399';
+            div.style.fontWeight = '700';
+            div.style.zIndex = '3';
             div.textContent = pos.text || '';
-            mapContainer.appendChild(div);
+            stage.appendChild(div);
             return;
         }
 
-        const cubicleId = pos.cubicle_id;
-        const items = inventoryData.filter(inv => getCubicleId(inv) === cubicleId);
+        const items = inventoryData.filter(inv => getCubicleId(inv) === pos.cubicle_id);
         const isOccupied = items.length > 0;
+        const isRoom = pos.type === 'room' || (pos.cubicle_id && (pos.cubicle_id.toUpperCase().includes('LOBBY') || pos.cubicle_id.toUpperCase().includes('NOC') || pos.cubicle_id.toUpperCase().includes('SERVER') || pos.cubicle_id.toUpperCase().includes('MEETING')));
 
         const div = document.createElement('div');
-        div.className = `cubicle-view ${isOccupied ? 'occupied' : ''}`;
+        div.setAttribute('data-id', pos.cubicle_id);
+        div.setAttribute('data-type', isRoom ? 'room' : 'cubicle');
+        div.setAttribute('data-occupied', isOccupied ? 'true' : 'false');
         div.style.left = `${pos.x}px`;
         div.style.top = `${pos.y}px`;
-        div.innerHTML = `
-            <span class="cubicle-id">${cubicleId}</span>
-            <i class="fas ${isOccupied ? 'fa-user' : 'fa-plus'} cubicle-icon"></i>
-            ${isOccupied ? `<div class="cubicle-tooltip">${items.length} Items</div>` : ''}
-        `;
-        div.onclick = () => handleCubicleClick(cubicleId);
-        div.ondragover = (e) => allowDrop(e);
-        div.ondrop = (e) => dropItemToCubicle(e, cubicleId);
-        mapContainer.appendChild(div);
+
+        if (isRoom) {
+            div.className = `cubicle-view mini room-card ${isOccupied ? 'occupied' : ''}`;
+            let roomIcon = 'fa-building';
+            const upper = pos.cubicle_id.toUpperCase();
+            if (upper.includes('NOC')) roomIcon = 'fa-network-wired';
+            else if (upper.includes('SERVER')) roomIcon = 'fa-server';
+            else if (upper.includes('MEETING') || upper.includes('RAPAT')) roomIcon = 'fa-users';
+
+            div.innerHTML = `
+                <div class="room-header-wrap">
+                    <i class="fas ${roomIcon} room-icon"></i>
+                    <span class="room-title">${pos.cubicle_id}</span>
+                </div>
+                <span class="room-subtitle">${isOccupied ? `${items.length} Aset Terpasang` : 'Area Publik'}</span>
+                ${isOccupied ? `<span class="item-count-badge">${items.length}</span>` : ''}
+                <div class="cubicle-tooltip">
+                    <strong style="color: #34d399;">${pos.cubicle_id}</strong><br>
+                    <span style="font-size: 10px; color: #94a3b8;">${isOccupied ? `${items.length} Barang Terpasang` : 'Ruangan Khusus / Belum ada barang'}</span>
+                </div>
+            `;
+        } else {
+            div.className = `cubicle-view mini desk-node ${isOccupied ? 'occupied' : ''}`;
+
+            let iconClass = 'fa-plus';
+            if (isOccupied) {
+                const hasLaptop = items.some(i => (i.name || '').toLowerCase().includes('laptop'));
+                const hasPC = items.some(i => (i.name || '').toLowerCase().includes('pc') || (i.name || '').toLowerCase().includes('server'));
+                iconClass = hasLaptop ? 'fa-laptop' : (hasPC ? 'fa-server' : 'fa-desktop');
+            }
+
+            const itemsPreview = isOccupied ? items.slice(0, 2).map(i => `• ${i.name || 'Barang'}`).join('<br>') : '';
+            div.innerHTML = `
+                <span class="cubicle-id">${pos.cubicle_id}</span>
+                <i class="fas ${iconClass} cubicle-icon"></i>
+                ${isOccupied ? `<span class="item-count-badge">${items.length}</span>` : ''}
+                <div class="cubicle-tooltip">
+                    <strong>${pos.cubicle_id}</strong> • <span style="color: ${isOccupied ? '#60a5fa' : '#94a3b8'};">${isOccupied ? 'Terisi Aset' : 'Kosong'}</span><br>
+                    ${isOccupied ? `<div style="font-size: 10px; color: #cbd5e1; margin-top: 3px;">${itemsPreview}${items.length > 2 ? `<br>+${items.length - 2} lainnya` : ''}</div>` : '<span style="font-size: 10px; color: #94a3b8;">Klik untuk kelola / drag barang ke sini</span>'}
+                </div>
+            `;
+        }
+
+        // Click handler to open detail modal
+        div.onclick = (e) => {
+            e.stopPropagation();
+            if (typeof handleCubicleClick === 'function') {
+                handleCubicleClick(pos.cubicle_id);
+            }
+        };
+
+        // Drag & Drop Handlers from Pool Sidebar
+        div.ondragover = (e) => {
+            e.preventDefault();
+            div.classList.add('drag-over');
+        };
+
+        div.ondragleave = () => {
+            div.classList.remove('drag-over');
+        };
+
+        div.ondrop = (e) => {
+            e.preventDefault();
+            div.classList.remove('drag-over');
+            dropItemToCubicle(e, pos.cubicle_id);
+        };
+
+        stage.appendChild(div);
+    });
+
+    // Auto-fit to viewport on initial render
+    if (!mapViewState.hasUserInteracted) {
+        setTimeout(() => fitMapViewMap(), 50);
+    } else {
+        applyMapViewTransform();
+    }
+
+    // Attach pan/drag listeners to viewport
+    setupMapViewPanListeners(viewport || document.getElementById('officeMapViewport'));
+}
+
+function fitMapViewMap() {
+    const viewport = document.getElementById('officeMapViewport');
+    const stage = document.getElementById('officeMapStage');
+    if (!viewport || !stage) return;
+
+    const bounds = mapViewState.stageBounds;
+    const contentW = Math.max(300, (bounds.maxX - bounds.minX) + 140);
+    const contentH = Math.max(300, (bounds.maxY - bounds.minY) + 140);
+
+    const contW = viewport.clientWidth || 900;
+    const contH = viewport.clientHeight || 560;
+
+    const scaleX = (contW - 40) / contentW;
+    const scaleY = (contH - 40) / contentH;
+    const optimalScale = Math.max(0.3, Math.min(scaleX, scaleY, 1.15));
+
+    mapViewState.zoom = optimalScale;
+    mapViewState.panX = Math.round((contW - contentW * optimalScale) / 2 - (bounds.minX - 70) * optimalScale);
+    mapViewState.panY = Math.round((contH - contentH * optimalScale) / 2 - (bounds.minY - 70) * optimalScale);
+
+    applyMapViewTransform();
+
+    document.querySelectorAll('.zone-pill-btn[data-map-zone]').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-map-zone') === 'all');
     });
 }
+
+function zoomMapViewMap(delta) {
+    mapViewState.hasUserInteracted = true;
+    const newZoom = Math.max(0.25, Math.min(2.5, mapViewState.zoom + delta));
+    mapViewState.zoom = newZoom;
+    applyMapViewTransform();
+}
+
+function focusMapViewZone(zone) {
+    mapViewState.hasUserInteracted = true;
+    document.querySelectorAll('.zone-pill-btn[data-map-zone]').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-map-zone') === zone);
+    });
+
+    if (zone === 'all') {
+        fitMapViewMap();
+        return;
+    }
+
+    const viewport = document.getElementById('officeMapViewport');
+    if (!viewport) return;
+
+    const contW = viewport.clientWidth || 900;
+    const contH = viewport.clientHeight || 560;
+
+    const targetBlocks = zone.split('');
+    const targetItems = (cubiclePositions || []).filter(p => (p.x > 0 || p.y > 0) && targetBlocks.some(b => p.cubicle_id && p.cubicle_id.startsWith(b + '-')));
+
+    if (targetItems.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    targetItems.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
+
+    const contentW = Math.max(200, (maxX - minX) + 100);
+    const contentH = Math.max(200, (maxY - minY) + 100);
+
+    const scale = Math.max(0.5, Math.min((contW - 60) / contentW, (contH - 60) / contentH, 1.25));
+    mapViewState.zoom = scale;
+    mapViewState.panX = Math.round((contW - contentW * scale) / 2 - (minX - 50) * scale);
+    mapViewState.panY = Math.round((contH - contentH * scale) / 2 - (minY - 50) * scale);
+
+    applyMapViewTransform();
+}
+
+function setMapViewFilter(filter) {
+    mapViewState.currentFilter = filter;
+    document.querySelectorAll('.map-filter-pill[data-map-filter]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-map-filter') === filter);
+    });
+
+    const nodes = document.querySelectorAll('#officeMapStage .cubicle-view');
+    nodes.forEach(node => {
+        const isOccupied = node.getAttribute('data-occupied') === 'true';
+        const type = node.getAttribute('data-type');
+
+        let match = false;
+        if (filter === 'all') match = true;
+        else if (filter === 'occupied') match = isOccupied;
+        else if (filter === 'vacant') match = (!isOccupied && type !== 'room');
+        else if (filter === 'rooms') match = (type === 'room');
+
+        if (match) {
+            node.classList.remove('dimmed');
+        } else {
+            node.classList.add('dimmed');
+        }
+    });
+}
+
+function updateMapViewCounters(all, occupied, vacant, rooms) {
+    const elAll = document.getElementById('mapViewCountAll');
+    const elOcc = document.getElementById('mapViewCountOccupied');
+    const elVac = document.getElementById('mapViewCountVacant');
+    const elRms = document.getElementById('mapViewCountRooms');
+
+    if (elAll) elAll.textContent = all;
+    if (elOcc) elOcc.textContent = occupied;
+    if (elVac) elVac.textContent = vacant;
+    if (elRms) elRms.textContent = rooms;
+}
+
+function applyMapViewTransform() {
+    const stage = document.getElementById('officeMapStage');
+    if (!stage) return;
+    stage.style.transform = `translate(${mapViewState.panX}px, ${mapViewState.panY}px) scale(${mapViewState.zoom})`;
+}
+
+function toggleMapViewSidebar() {
+    const sidebar = document.getElementById('mapPoolSidebar');
+    const btn = document.getElementById('btnTogglePoolSidebar');
+    if (!sidebar) return;
+
+    mapViewState.isSidebarCollapsed = !mapViewState.isSidebarCollapsed;
+    if (mapViewState.isSidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+        if (btn) btn.classList.add('active');
+    } else {
+        sidebar.classList.remove('collapsed');
+        if (btn) btn.classList.remove('active');
+    }
+
+    setTimeout(() => fitMapViewMap(), 300);
+}
+
+let isMapViewPanListenerAttached = false;
+function setupMapViewPanListeners(viewport) {
+    if (isMapViewPanListenerAttached || !viewport) return;
+    isMapViewPanListenerAttached = true;
+
+    viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.cubicle-view') || e.target.closest('button')) return;
+        mapViewState.isDragging = true;
+        mapViewState.hasUserInteracted = true;
+        mapViewState.dragStartX = e.clientX - mapViewState.panX;
+        mapViewState.dragStartY = e.clientY - mapViewState.panY;
+        viewport.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!mapViewState.isDragging) return;
+        mapViewState.panX = e.clientX - mapViewState.dragStartX;
+        mapViewState.panY = e.clientY - mapViewState.dragStartY;
+        applyMapViewTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (mapViewState.isDragging) {
+            mapViewState.isDragging = false;
+            viewport.style.cursor = 'grab';
+        }
+    });
+
+    viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        mapViewState.hasUserInteracted = true;
+        const delta = e.deltaY < 0 ? 0.08 : -0.08;
+        zoomMapViewMap(delta);
+    }, { passive: false });
+}
+
+function highlightMapViewMap() {
+    const query = (document.getElementById('mapViewSearchInput')?.value || '').toLowerCase().trim();
+    const cubicles = document.querySelectorAll('#officeMapStage .cubicle-view');
+
+    if (!query) {
+        cubicles.forEach(c => c.classList.remove('highlight-pulse', 'dimmed'));
+        if (mapViewState.currentFilter !== 'all') {
+            setMapViewFilter(mapViewState.currentFilter);
+        }
+        return;
+    }
+
+    cubicles.forEach(c => {
+        const cubicleId = c.getAttribute('data-id') || '';
+        const items = inventoryData.filter(inv => getCubicleId(inv) === cubicleId);
+
+        const match = cubicleId.toLowerCase().includes(query) ||
+            items.some(inv =>
+                (inv.name && inv.name.toLowerCase().includes(query)) ||
+                (inv.sn && inv.sn.toLowerCase().includes(query)) ||
+                (inv.merk && inv.merk.toLowerCase().includes(query))
+            );
+
+        if (match) {
+            c.classList.add('highlight-pulse');
+            c.classList.remove('dimmed');
+        } else {
+            c.classList.remove('highlight-pulse');
+            c.classList.add('dimmed');
+        }
+    });
+}
+
+// Global exposures
+window.renderNormalView = renderNormalView;
+window.fitMapViewMap = fitMapViewMap;
+window.zoomMapViewMap = zoomMapViewMap;
+window.focusMapViewZone = focusMapViewZone;
+window.setMapViewFilter = setMapViewFilter;
+window.toggleMapViewSidebar = toggleMapViewSidebar;
+window.highlightMapViewMap = highlightMapViewMap;
 
 function renderDesigner() {
     const palette = document.getElementById('cubiclePalette');
@@ -6089,10 +8390,14 @@ function renderDesigner() {
     if (!palette || !canvas) return;
 
     let paletteHtml = '';
+    const renderedIds = new Set();
+
+    // 1. Configured blocks (A-F)
     Object.keys(cubicleConfig).forEach(block => {
         for (let i = 1; i <= cubicleConfig[block]; i++) {
             const id = `${block}-${String(i).padStart(2, '0')}`;
-            if (!cubiclePositions.find(p => p.cubicle_id === id)) {
+            renderedIds.add(id);
+            if (!cubiclePositions.find(p => p.cubicle_id === id && (p.x > 0 || p.y > 0))) {
                 const isSelected = selectedPaletteItems.has(id);
                 paletteHtml += `
                     <div class="palette-item ${isSelected ? 'selected' : ''}" 
@@ -6105,7 +8410,31 @@ function renderDesigner() {
             }
         }
     });
-    palette.innerHTML = paletteHtml;
+
+    // 2. Custom cubicles/rooms registered in cubiclePositions that are not yet placed on the canvas
+    (cubiclePositions || []).forEach(p => {
+        const isLabel = p.type === 'label' || (p.cubicle_id && p.cubicle_id.startsWith('LABEL_'));
+        if (!isLabel && p.cubicle_id && !renderedIds.has(p.cubicle_id)) {
+            renderedIds.add(p.cubicle_id);
+            const isPlacedOnCanvas = (p.x > 0 || p.y > 0);
+            if (!isPlacedOnCanvas) {
+                const isSelected = selectedPaletteItems.has(p.cubicle_id);
+                paletteHtml += `
+                    <div class="palette-item custom-palette-item ${isSelected ? 'selected' : ''}" 
+                         draggable="true" 
+                         ondragstart="dragPaletteStart(event, '${p.cubicle_id}')"
+                         onclick="togglePaletteItem(event, '${p.cubicle_id}')"
+                         title="${p.type === 'room' ? 'Ruangan' : 'Kubikel'} - Klik untuk pilih, tarik ke kanvas"
+                         style="border-color: rgba(16, 185, 129, 0.5); position: relative; padding-right: 18px;">
+                        <span>${p.cubicle_id}</span>
+                        <span onclick="deleteCustomCubiclePermanently(event, '${p.cubicle_id}')" title="Hapus Permanen" style="position: absolute; right: 4px; top: 2px; font-size: 11px; color: #ef4444; opacity: 0.7; cursor: pointer; padding: 0 2px;">×</span>
+                    </div>
+                `;
+            }
+        }
+    });
+
+    palette.innerHTML = paletteHtml || '<div style="color: var(--text-tertiary); font-size: 12px; padding: 12px; text-align: center; width: 100%;">Semua kubikel telah diletakkan di kanvas. Klik "+ Kubikel Baru" untuk menambah nomor meja.</div>';
 
     // Update bulk add button
     const bulkAddBtn = document.getElementById('bulkAddBtn');
@@ -6127,8 +8456,13 @@ function renderDesigner() {
     existing.forEach(el => el.remove());
 
     cubiclePositions.forEach(pos => {
-        const div = document.createElement('div');
         const isLabel = pos.type === 'label' || (pos.cubicle_id && pos.cubicle_id.startsWith('LABEL_'));
+        // Meja atau ruangan yang belum ditaruh di kanvas (x: 0, y: 0) tidak digambar di kanvas (menunggu di palette)
+        if (!isLabel && (!pos.x || pos.x <= 0) && (!pos.y || pos.y <= 0)) {
+            return;
+        }
+
+        const div = document.createElement('div');
 
         if (isLabel) {
             div.className = 'placed-label';
@@ -6162,10 +8496,63 @@ function removeFromCanvas(event, cubicleId) {
         event.preventDefault();
         event.stopPropagation();
     }
-    console.log('Removing cubicle:', cubicleId);
-    cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
+    console.log('Kembalikan ke palette:', cubicleId);
+
+    const matches = (cubiclePositions || []).filter(p => p.cubicle_id === cubicleId);
+    const isLabel = matches.some(m => m.type === 'label' || (m.cubicle_id && m.cubicle_id.startsWith('LABEL_')));
+
+    if (isLabel) {
+        cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
+    } else {
+        const itemType = matches.length > 0 ? (matches[0].type || 'cubicle') : 'cubicle';
+        // Hapus duplikat dan pastikan tersimpan 1 instance dengan koordinat x:0, y:0
+        cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
+        cubiclePositions.push({
+            cubicle_id: cubicleId,
+            x: 0,
+            y: 0,
+            type: itemType,
+            text: cubicleId
+        });
+        showToast(`"${cubicleId}" dikembalikan ke Daftar Kubikel`);
+    }
+
     renderDesigner();
 }
+
+async function deleteCustomCubiclePermanently(event, cubicleId) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Kubikel Permanen',
+        message: `Hapus data kubikel / meja <strong>"${cubicleId}"</strong> secara permanen dari sistem denah?`,
+        confirmText: 'Ya, Hapus',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
+    if (!confirmDelete) return;
+
+    try {
+        const res = await fetch(`/api/cubicle-positions/${encodeURIComponent(cubicleId)}`, {
+            method: 'DELETE'
+        });
+        if (res.ok) {
+            cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
+            showToast(`"${cubicleId}" berhasil dihapus permanen`);
+            populateCubicleSuggestions();
+            renderDesigner();
+        } else {
+            showToast('Gagal menghapus', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        showToast('Gagal menghapus', 'error');
+    }
+}
+window.deleteCustomCubiclePermanently = deleteCustomCubiclePermanently;
 
 // EXPOSE TO GLOBAL SCOPE
 window.dragPaletteStart = dragPaletteStart;
@@ -6189,18 +8576,22 @@ function dropToCanvas(e) {
 
     console.log('Dropped type:', type, 'cubicle:', cubicleId);
 
-    if (type !== "palette") return;
+    if (type !== "palette" || !cubicleId) return;
 
     const canvas = document.getElementById('designerCanvas');
     const rect = canvas.getBoundingClientRect();
 
-    const x = Math.round((e.clientX - rect.left - 30) / 10) * 10;
-    const y = Math.round((e.clientY - rect.top - 30) / 10) * 10;
+    const x = Math.max(10, Math.round((e.clientX - rect.left - 30) / 10) * 10);
+    const y = Math.max(10, Math.round((e.clientY - rect.top - 30) / 10) * 10);
 
+    const existingType = (cubiclePositions.find(p => p.cubicle_id === cubicleId)?.type) || 'cubicle';
+    cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== cubicleId);
     cubiclePositions.push({
         cubicle_id: cubicleId,
-        x: Math.max(0, x),
-        y: Math.max(0, y)
+        x: x,
+        y: y,
+        type: existingType,
+        text: cubicleId
     });
 
     renderDesigner();
@@ -6255,7 +8646,7 @@ async function saveMapLayout() {
             showToast('Denah berhasil disimpan!');
             navigateTo('map-view');
         } else {
-            alert('Gagal menyimpan denah');
+            showToast('Gagal menyimpan denah!', 'error');
         }
     } catch (err) {
         console.error(err);
@@ -6300,28 +8691,40 @@ async function addSelectedToCanvas() {
     showToast(`Berhasil menambahkan ${itemsToAdd.length} kubikel`);
 }
 
-function addNewLabel() {
-    const labelText = prompt("Masukkan teks label (contoh: Area A, Ruang Meeting):");
-    if (!labelText) return;
+async function addNewLabel() {
+    const labelText = await showPromptDialog({
+        title: 'Tambah Label Denah',
+        message: 'Masukkan teks label nama area, zona, atau ruangan:',
+        placeholder: 'Contoh: Area A, Ruang Meeting, Server...',
+        confirmText: 'Tambahkan Label',
+        cancelText: 'Batal'
+    });
+    if (!labelText || !labelText.trim()) return;
 
     const id = `LABEL_${Date.now()}`;
     cubiclePositions.push({
         cubicle_id: id,
         type: 'label',
-        text: labelText,
+        text: labelText.trim(),
         x: 100,
         y: 100
     });
     renderDesigner();
 }
 
-function editLabelText(id) {
+async function editLabelText(id) {
     const item = cubiclePositions.find(p => p.cubicle_id === id);
     if (!item || item.type !== 'label') return;
 
-    const newText = prompt("Edit teks label:", item.text);
-    if (newText !== null) {
-        item.text = newText;
+    const newText = await showPromptDialog({
+        title: 'Edit Teks Label',
+        message: 'Perbarui teks label pada denah:',
+        defaultValue: item.text,
+        confirmText: 'Simpan',
+        cancelText: 'Batal'
+    });
+    if (newText !== null && newText.trim() !== '') {
+        item.text = newText.trim();
         renderDesigner();
     }
 }
@@ -6373,12 +8776,15 @@ async function handleCubicleClick(cubicleId) {
 
     if (items.length === 0) {
         itemsList.innerHTML = `
-            <div class="empty-state-card" style="text-align: center; padding: 40px; opacity: 0.6; animation: fadeIn 0.4s ease;">
-                <div style="width: 60px; height: 60px; background: rgba(37, 99, 235, 0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+            <div class="empty-state-card" style="text-align: center; padding: 35px 20px; animation: fadeIn 0.4s ease;">
+                <div style="width: 55px; height: 55px; background: rgba(37, 99, 235, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px;">
                     <i class="fas fa-box-open" style="font-size: 24px; color: var(--primary);"></i>
                 </div>
-                <p style="font-weight: 600; margin-bottom: 5px; color: var(--text-primary);">Belum Ada Inventaris</p>
-                <p style="font-size: 12px; color: var(--text-secondary);">Silakan tambahkan barang ke kubikel ini melalui menu mapping.</p>
+                <p style="font-weight: 700; margin-bottom: 6px; color: var(--text-primary); font-size: 15px;">Belum Ada Inventaris</p>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; max-width: 320px; margin-left: auto; margin-right: auto;">Kubikel ini belum memiliki aset terpasang. Klik tombol di bawah untuk memilih dan menugaskan barang.</p>
+                <button type="button" class="primary-btn" onclick="openAssignFromDetail()" style="padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-plus-circle"></i> Pilih & Pasang Barang
+                </button>
             </div>
         `;
     } else {
@@ -6421,19 +8827,184 @@ async function handleCubicleClick(cubicleId) {
     openModal('cubicleDetailModal');
 }
 
+let currentAssignFilterTab = 'available';
+
 function openAssignFromDetail() {
+    if (!selectedCubicleId) return;
     closeModal('cubicleDetailModal');
-    navigateTo('map-view');
-    // We can also trigger a highlight for the selected cubicle on the map
-    setTimeout(() => {
-        // Fix: Use the correct class or ID for the map container
-        const cubicleElement = document.querySelector(`.office-map-view [data-id="${selectedCubicleId}"]`);
-        if (cubicleElement) {
-            cubicleElement.classList.add('highlight-pulse');
-            cubicleElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setTimeout(() => cubicleElement.classList.remove('highlight-pulse'), 5000);
+    openAssignModal(selectedCubicleId);
+}
+
+function openAssignModal(cubicleId) {
+    selectedCubicleId = cubicleId;
+    const badge = document.getElementById('assignTargetCubicleBadge');
+    if (badge) badge.textContent = cubicleId;
+
+    const searchInput = document.getElementById('assignModalSearchInput');
+    if (searchInput) searchInput.value = '';
+
+    currentAssignFilterTab = 'available';
+    updateAssignFilterTabsUI();
+    renderAssignItemsList();
+    openModal('assignItemToCubicleModal');
+}
+
+function setAssignFilterTab(tab) {
+    currentAssignFilterTab = tab;
+    updateAssignFilterTabsUI();
+    renderAssignItemsList();
+}
+
+function updateAssignFilterTabsUI() {
+    const tabAvailable = document.getElementById('assignTabAvailable');
+    const tabAll = document.getElementById('assignTabAll');
+    if (tabAvailable) {
+        if (currentAssignFilterTab === 'available') {
+            tabAvailable.style.background = 'var(--primary)';
+            tabAvailable.style.color = '#ffffff';
+            tabAvailable.style.borderColor = 'var(--primary)';
+            tabAvailable.style.fontWeight = '600';
+        } else {
+            tabAvailable.style.background = 'var(--bg-card)';
+            tabAvailable.style.color = 'var(--text-secondary)';
+            tabAvailable.style.borderColor = 'var(--border)';
+            tabAvailable.style.fontWeight = '500';
         }
-    }, 500);
+    }
+    if (tabAll) {
+        if (currentAssignFilterTab === 'all') {
+            tabAll.style.background = 'var(--primary)';
+            tabAll.style.color = '#ffffff';
+            tabAll.style.borderColor = 'var(--primary)';
+            tabAll.style.fontWeight = '600';
+        } else {
+            tabAll.style.background = 'var(--bg-card)';
+            tabAll.style.color = 'var(--text-secondary)';
+            tabAll.style.borderColor = 'var(--border)';
+            tabAll.style.fontWeight = '500';
+        }
+    }
+}
+
+function renderAssignItemsList() {
+    const container = document.getElementById('assignModalItemsList');
+    const countInfo = document.getElementById('assignModalCountInfo');
+    if (!container) return;
+
+    const q = (document.getElementById('assignModalSearchInput')?.value || '').toLowerCase().trim();
+
+    let items = Array.isArray(inventoryData) ? [...inventoryData] : [];
+
+    if (currentAssignFilterTab === 'available') {
+        items = items.filter(item => {
+            const cId = getCubicleId(item);
+            return !cId || cId === '-' || (item.lokasi && item.lokasi.toLowerCase().includes('gudang'));
+        });
+    }
+
+    if (q) {
+        items = items.filter(item => {
+            return (item.name || '').toLowerCase().includes(q) ||
+                   (item.merk || '').toLowerCase().includes(q) ||
+                   (item.sn || '').toLowerCase().includes(q) ||
+                   (item.id || '').toLowerCase().includes(q) ||
+                   (item.lokasi || '').toLowerCase().includes(q);
+        });
+    }
+
+    if (countInfo) {
+        countInfo.textContent = `${items.length} barang inventaris`;
+    }
+
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px 20px; color: var(--text-secondary);">
+                <div style="width: 50px; height: 50px; border-radius: 50%; background: rgba(59, 130, 246, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; color: var(--primary); font-size: 22px;">
+                    <i class="fas fa-box-open"></i>
+                </div>
+                <p style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: var(--text-primary);">Tidak Ada Barang Ditemukan</p>
+                <p style="font-size: 12px; margin-bottom: 16px;">${currentAssignFilterTab === 'available' ? 'Semua barang sudah terpasang di kubikel, atau coba beralih ke tab \"Semua Inventaris\".' : 'Tidak ada data barang yang sesuai dengan kata kunci pencarian.'}</p>
+                <button type="button" onclick="quickRegisterNewAssetForCubicle()" class="primary-btn" style="padding: 8px 16px; border-radius: 8px; font-size: 12px; margin: 0 auto; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-plus"></i> Daftarkan Barang Baru ke ${selectedCubicleId}
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = items.map(item => {
+        const currentCubicle = getCubicleId(item);
+        const isAlreadyHere = currentCubicle === selectedCubicleId;
+        const kondisi = item.kondisiAfter || item.kondisiBefore || 'Baik';
+        const statusClass = getStatusBadgeClass(kondisi);
+
+        let locationBadge = '';
+        if (!currentCubicle) {
+            locationBadge = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 500;"><i class="fas fa-warehouse"></i> ${item.lokasi || 'Standby'}</span>`;
+        } else if (isAlreadyHere) {
+            locationBadge = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 4px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600;"><i class="fas fa-check"></i> Sudah di ${selectedCubicleId}</span>`;
+        } else {
+            locationBadge = `<span style="font-size: 10.5px; padding: 2px 7px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 500;"><i class="fas fa-exchange-alt"></i> Di Kubikel ${currentCubicle}</span>`;
+        }
+
+        return `
+            <div class="assign-item-card" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; transition: all 0.2s ease; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                    <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.05) 100%); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; border: 1px solid rgba(37, 99, 235, 0.15);">
+                        <i class="fas ${getItemIcon(item.name)}"></i>
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-weight: 700; font-size: 13.5px; color: var(--text-primary);">${item.name}</span>
+                            <span class="status-badge ${statusClass}" style="font-size: 9.5px; padding: 1px 6px;">${kondisi}</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span><strong style="color: var(--primary);">${item.id}</strong> | ${item.merk || '-'}</span>
+                            <span><i class="fas fa-barcode"></i> SN: ${item.sn || '-'}</span>
+                            ${locationBadge}
+                        </div>
+                    </div>
+                </div>
+                <div style="flex-shrink: 0;">
+                    ${isAlreadyHere ? `
+                        <button type="button" disabled style="padding: 7px 12px; border-radius: 8px; background: var(--bg-card); color: var(--text-tertiary); border: 1px solid var(--border); font-size: 12px; font-weight: 600; cursor: not-allowed;">
+                            Terpasang
+                        </button>
+                    ` : `
+                        <button type="button" onclick="submitAssignItem('${item.id}', '${selectedCubicleId}')" class="primary-btn" style="padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);">
+                            <i class="fas fa-plus"></i> Pasang
+                        </button>
+                    `}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function submitAssignItem(itemId, cubicleId) {
+    closeModal('assignItemToCubicleModal');
+    await assignItemToCubicle(itemId, cubicleId);
+}
+
+function closeAssignModalAndReturn() {
+    closeModal('assignItemToCubicleModal');
+    if (selectedCubicleId) {
+        handleCubicleClick(selectedCubicleId);
+    }
+}
+
+function quickRegisterNewAssetForCubicle() {
+    const cubicle = selectedCubicleId;
+    closeModal('assignItemToCubicleModal');
+    closeModal('cubicleDetailModal');
+    navigateTo('add-inventory');
+    setTimeout(() => {
+        const locInput = document.getElementById('itemLocation');
+        if (locInput && cubicle) {
+            locInput.value = cubicle;
+            if (typeof updateLiveAssetPreview === 'function') updateLiveAssetPreview();
+        }
+    }, 300);
 }
 
 // Helper for icons
@@ -6463,18 +9034,420 @@ async function assignItemToCubicle(itemId, cubicleId) {
             body: JSON.stringify({ item_id: itemId, cubicle_id: cubicleId })
         });
         if (response.ok) {
+            const resData = await response.json();
             const item = inventoryData.find(inv => inv.id === itemId);
-            if (item) item.cubicle_id = cubicleId;
-            showToast(cubicleId ? `Berhasil ke ${cubicleId}` : 'Dikeluarkan');
-            const modal = document.getElementById('cubicleDetailModal');
-            if (modal && modal.classList.contains('show')) {
+            if (item) {
+                item.cubicle_id = cubicleId;
+                item.cubicleId = cubicleId;
+                if (cubicleId) item.lokasi = cubicleId;
+                else item.lokasi = 'Gudang';
+            }
+            showToast(cubicleId ? `Barang berhasil ditugaskan ke ${cubicleId}` : 'Barang dikeluarkan dari kubikel');
+
+            // Re-render denah interaktif & dashboard
+            renderNormalView();
+            if (typeof renderDashboardMap === 'function') renderDashboardMap();
+            if (typeof renderMap === 'function') renderMap();
+
+            // Re-open atau perbarui modal detail kubikel agar langsung menampilkan perubahan
+            if (selectedCubicleId) {
                 handleCubicleClick(selectedCubicleId);
             }
-            renderDashboardMap();
-            renderMap();
+        } else {
+            const err = await response.json();
+            showToast(err.message || 'Gagal memproses', 'error');
         }
     } catch (err) {
         console.error(err);
-        showToast('Gagal memproses', 'error');
+        showToast('Gagal memproses penugasan kubikel', 'error');
     }
 }
+
+// --- NON-INVENTORY MANAGEMENT ---
+let nonInventoryData = [];
+
+async function loadNonInventory() {
+    try {
+        const res = await fetch('/api/non-inventory');
+        if (res.ok) {
+            nonInventoryData = await res.json();
+            renderNonInventoryTable();
+        }
+    } catch (err) {
+        console.error('Gagal memuat data non-inventaris:', err);
+    }
+}
+
+function renderNonInventoryTable() {
+    const tbody = document.getElementById('nonInventoryTableBody');
+    const emptyState = document.getElementById('nonInventoryEmptyState');
+    if (!tbody) return;
+
+    // Update KPI stats
+    const totalItemsEl = document.getElementById('statNonInvTotalItems');
+    const totalQtyEl = document.getElementById('statNonInvTotalQty');
+    const lowStockEl = document.getElementById('statNonInvLowStock');
+
+    const totalItems = nonInventoryData.length;
+    const totalQty = nonInventoryData.reduce((acc, curr) => acc + (parseInt(curr.jumlah, 10) || 0), 0);
+    const lowStockCount = nonInventoryData.filter(i => (parseInt(i.jumlah, 10) || 0) <= 5).length;
+
+    if (totalItemsEl) totalItemsEl.textContent = totalItems;
+    if (totalQtyEl) totalQtyEl.textContent = totalQty;
+    if (lowStockEl) lowStockEl.textContent = lowStockCount;
+
+    const searchTerm = (document.getElementById('nonInvSearchInput')?.value || '').toLowerCase().trim();
+    const filtered = nonInventoryData.filter(item => 
+        (item.namaBarang || '').toLowerCase().includes(searchTerm) ||
+        (item.kategori || '').toLowerCase().includes(searchTerm) ||
+        (item.lokasi || '').toLowerCase().includes(searchTerm) ||
+        (item.keterangan || '').toLowerCase().includes(searchTerm)
+    );
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+        return;
+    }
+    if (emptyState) emptyState.style.display = 'none';
+
+    tbody.innerHTML = filtered.map(item => {
+        const qtyNum = parseInt(item.jumlah, 10) || 0;
+        const isLow = qtyNum <= 5;
+
+        // Dynamic icon based on item name / category
+        let itemIcon = 'fa-box';
+        const nameLower = (item.namaBarang || '').toLowerCase();
+        if (nameLower.includes('kabel') || nameLower.includes('lan') || nameLower.includes('utp') || nameLower.includes('rj45')) itemIcon = 'fa-network-wired';
+        else if (nameLower.includes('lem') || nameLower.includes('tape') || nameLower.includes('solasi')) itemIcon = 'fa-tape';
+        else if (nameLower.includes('kertas') || nameLower.includes('hvs') || nameLower.includes('buku')) itemIcon = 'fa-scroll';
+        else if (nameLower.includes('tinta') || nameLower.includes('toner') || nameLower.includes('cartridge')) itemIcon = 'fa-print';
+        else if (nameLower.includes('spidol') || nameLower.includes('pulpen') || nameLower.includes('pen')) itemIcon = 'fa-pen';
+        else if (nameLower.includes('baterai') || nameLower.includes('battery')) itemIcon = 'fa-car-battery';
+
+        const qtyBadge = isLow
+            ? `<span style="background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 5px;">${qtyNum} <i class="fas fa-exclamation-circle" title="Stok Kritis (≤ 5)"></i></span>`
+            : `<span style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center;">${qtyNum}</span>`;
+
+        return `
+            <tr style="vertical-align: middle;">
+                <td style="padding: 14px 16px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(37, 99, 235, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; border: 1px solid rgba(37, 99, 235, 0.15);">
+                            <i class="fas ${itemIcon}"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 14px; color: var(--text-primary); text-transform: capitalize;">
+                                ${item.namaBarang}
+                            </div>
+                            ${isLow ? `
+                                <div style="margin-top: 3px;">
+                                    <span style="font-size: 9.5px; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 1px 6px; border-radius: 4px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;">
+                                        <i class="fas fa-exclamation-triangle"></i> STOK MENIPIS
+                                    </span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </td>
+                <td style="padding: 14px 16px;">
+                    <span class="badge" style="background: rgba(37, 99, 235, 0.12); color: #3b82f6; border: 1px solid rgba(37, 99, 235, 0.25); padding: 4px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase;">
+                        ${item.kategori || 'Umum'}
+                    </span>
+                </td>
+                <td style="padding: 14px 16px;">${qtyBadge}</td>
+                <td style="padding: 14px 16px; font-weight: 500; color: var(--text-secondary); font-size: 13px;">${item.satuan || 'Pcs'}</td>
+                <td style="padding: 14px 16px;">
+                    <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary);">
+                        <i class="fas fa-map-marker-alt" style="color: var(--primary); font-size: 12px;"></i>
+                        <span>${item.lokasi || '-'}</span>
+                    </div>
+                </td>
+                <td style="padding: 14px 16px;">
+                    <span style="font-size: 12px; color: var(--text-secondary); max-width: 200px; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.keterangan || ''}">
+                        ${item.keterangan || '-'}
+                    </span>
+                </td>
+                <td style="padding: 14px 16px; text-align: center; white-space: nowrap;">
+                    <div class="non-inv-actions-wrap" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                        <button class="btn-stock-adjust btn-stock-in" onclick="openStockAdjustModal('${item.id}', 'IN')" title="Tambah Stok Masuk (Restock)">
+                            <i class="fas fa-plus"></i> <span>Masuk</span>
+                        </button>
+                        <button class="btn-stock-adjust btn-stock-out" onclick="openStockAdjustModal('${item.id}', 'OUT')" title="Pakai / Pengeluaran Barang">
+                            <i class="fas fa-minus"></i> <span>Pakai</span>
+                        </button>
+                        <div style="width: 1px; height: 18px; background: var(--border); margin: 0 3px;"></div>
+                        <button class="btn-action-icon btn-edit" onclick="editNonInventory('${item.id}')" title="Edit Data Barang">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-action-icon btn-del" onclick="deleteNonInventory('${item.id}')" title="Hapus Barang">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openStockAdjustModal(id, type) {
+    const item = nonInventoryData.find(i => i.id === id);
+    if (!item) return;
+
+    document.getElementById('stockItemId').value = item.id;
+    document.getElementById('stockAdjustType').value = type;
+    document.getElementById('stockItemNameDisplay').textContent = item.namaBarang || '-';
+    document.getElementById('stockCurrentQtyDisplay').textContent = item.jumlah || 0;
+    document.getElementById('stockSatuanDisplay').textContent = item.satuan || 'Pcs';
+    document.getElementById('stockAmountInput').value = '';
+    document.getElementById('stockReasonInput').value = '';
+    document.getElementById('stockOperatorInput').value = '';
+
+    const isIncoming = type === 'IN';
+    const titleEl = document.getElementById('stockModalTitle');
+    const submitBtn = document.getElementById('stockSubmitBtn');
+    const amountLabel = document.getElementById('stockAmountLabel');
+    const reasonLabel = document.getElementById('stockReasonLabel');
+
+    if (isIncoming) {
+        titleEl.innerHTML = '<i class="fas fa-arrow-down" style="color: #10b981;"></i> Tambah Stok Masuk (Restock)';
+        submitBtn.style.background = '#10b981';
+        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Simpan Penambahan';
+        amountLabel.innerHTML = '<i class="fas fa-calculator"></i> Jumlah Masuk <span style="color: red;">*</span>';
+        reasonLabel.innerHTML = '<i class="fas fa-truck-loading"></i> Sumber Pengadaan / Catatan <span style="color: red;">*</span>';
+        document.getElementById('stockReasonInput').placeholder = 'Contoh: Pengadaan Baru Logistik / Sisa Pekerjaan';
+    } else {
+        titleEl.innerHTML = '<i class="fas fa-arrow-up" style="color: #f59e0b;"></i> Pengeluaran Stok (Pakai Barang)';
+        submitBtn.style.background = '#f59e0b';
+        submitBtn.innerHTML = '<i class="fas fa-minus"></i> Simpan Pengeluaran';
+        amountLabel.innerHTML = '<i class="fas fa-calculator"></i> Jumlah Dipakai <span style="color: red;">*</span>';
+        reasonLabel.innerHTML = '<i class="fas fa-map-pin"></i> Keperluan / Meja Penggunaan <span style="color: red;">*</span>';
+        document.getElementById('stockReasonInput').placeholder = 'Contoh: Pemasangan Kubikel A-14 / Ganti Kabel Putus';
+    }
+
+    document.getElementById('nonInventoryStockModal').classList.add('show');
+}
+
+async function submitStockAdjustment() {
+    const id = document.getElementById('stockItemId').value;
+    const type = document.getElementById('stockAdjustType').value;
+    const amount = parseInt(document.getElementById('stockAmountInput').value, 10);
+    const reason = document.getElementById('stockReasonInput').value.trim();
+    const operator = document.getElementById('stockOperatorInput').value.trim();
+
+    if (!amount || amount <= 0) {
+        showToast('Jumlah mutasi harus lebih besar dari 0!', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/non-inventory/${id}/adjust`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, amount, reason, operator })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Gagal menyimpan mutasi stok');
+        }
+
+        closeModal('nonInventoryStockModal');
+        await loadNonInventory();
+        if (typeof checkDashboardLowStock === 'function') checkDashboardLowStock();
+        showToast(`Berhasil mencatat mutasi stok: ${type === 'IN' ? '+' : '-'}${amount}!`, 'success');
+    } catch (e) {
+        showToast(e.message || 'Gagal mutasi stok', 'error');
+    }
+}
+
+function filterNonInventoryTable() {
+    renderNonInventoryTable();
+}
+
+function openNonInventoryModal(id = null) {
+    document.getElementById('nonInventoryForm').reset();
+    document.getElementById('nonInvEditId').value = '';
+    document.getElementById('nonInventoryModalTitle').innerHTML = '<i class="fas fa-boxes" style="color: var(--primary);"></i> Tambah Barang Non-Inventaris';
+
+    if (id) {
+        const item = nonInventoryData.find(i => i.id === id);
+        if (item) {
+            document.getElementById('nonInventoryModalTitle').innerHTML = '<i class="fas fa-edit" style="color: var(--primary);"></i> Edit Barang Non-Inventaris';
+            document.getElementById('nonInvEditId').value = item.id;
+            document.getElementById('nonInvName').value = item.namaBarang || '';
+            document.getElementById('nonInvCategory').value = item.kategori || '';
+            document.getElementById('nonInvJumlah').value = item.jumlah || 0;
+            document.getElementById('nonInvSatuan').value = item.satuan || 'Pcs';
+            document.getElementById('nonInvLokasi').value = item.lokasi || '';
+            document.getElementById('nonInvKeterangan').value = item.keterangan || '';
+        }
+    }
+    document.getElementById('nonInventoryModal').classList.add('show');
+}
+
+function editNonInventory(id) {
+    openNonInventoryModal(id);
+}
+
+async function saveNonInventoryItem() {
+    const id = document.getElementById('nonInvEditId').value;
+    const payload = {
+        namaBarang: document.getElementById('nonInvName').value,
+        kategori: document.getElementById('nonInvCategory').value,
+        jumlah: parseInt(document.getElementById('nonInvJumlah').value, 10) || 0,
+        satuan: document.getElementById('nonInvSatuan').value,
+        lokasi: document.getElementById('nonInvLokasi').value,
+        keterangan: document.getElementById('nonInvKeterangan').value
+    };
+
+    try {
+        const url = id ? `/api/non-inventory/${id}` : '/api/non-inventory';
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            showToast('Berhasil menyimpan barang non-inventaris!');
+            closeModal('nonInventoryModal');
+            loadNonInventory();
+        } else {
+            showToast('Gagal menyimpan data!', true);
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Terjadi kesalahan koneksi', true);
+    }
+}
+
+async function deleteNonInventory(id) {
+    const confirmDelete = await showConfirmDialog({
+        title: 'Hapus Barang Non-Inventaris',
+        message: 'Apakah Anda yakin ingin menghapus barang non-inventaris ini dari sistem?',
+        confirmText: 'Ya, Hapus',
+        cancelText: 'Batal',
+        danger: true,
+        icon: 'fa-trash-alt'
+    });
+    if (!confirmDelete) return;
+    try {
+        const res = await fetch(`/api/non-inventory/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Barang berhasil dihapus');
+            loadNonInventory();
+        } else {
+            showToast('Gagal menghapus barang', true);
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Terjadi kesalahan', true);
+    }
+}
+
+// --- SCAN KONDISI UPDATE ---
+async function applyScanKondisiUpdate() {
+    if (!currentScannedItem || !currentScannedItem.id) {
+        showToast('Tidak ada item aktif yang dipilih', true);
+        return;
+    }
+    const newKondisi = document.getElementById('scanUpdateKondisi')?.value || 'Baik';
+    try {
+        const res = await fetch('/api/inventory/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchValue: currentScannedItem.id, kondisi: newKondisi })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Kondisi item ${currentScannedItem.id} diperbarui jadi "${newKondisi}" & Dicek!`);
+            currentScannedItem.kondisiAfter = newKondisi;
+            currentScannedItem.checklist = 'Ya';
+            loadInventory();
+        } else {
+            showToast('Gagal memperbarui kondisi', true);
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Terjadi kesalahan koneksi', true);
+    }
+}
+
+// Hook loadNonInventory into startup init
+const originalInitApp = window.initApp || function() {};
+window.initApp = function() {
+    originalInitApp();
+    loadNonInventory();
+};
+
+function openDesignerAddCubicleModal() {
+    const input = document.getElementById('designerCubicleInput');
+    if (input) input.value = '';
+    openModal('addCubicleDesignerModal');
+    setTimeout(() => {
+        if (input) input.focus();
+    }, 200);
+}
+
+function quickFillDesignerCubicle(val) {
+    const input = document.getElementById('designerCubicleInput');
+    if (input) {
+        input.value = val;
+        input.focus();
+    }
+}
+
+async function submitDesignerAddCubicle() {
+    const input = document.getElementById('designerCubicleInput');
+    if (!input || !input.value.trim()) {
+        showToast('Nomor kubikel wajib diisi', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btnSubmitDesignerCubicle');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+    }
+
+    const items = input.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s.length > 0);
+    let successCount = 0;
+
+    for (const name of items) {
+        try {
+            const res = await fetch('/api/cubicle-positions/add-location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, type: 'cubicle' })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                cubiclePositions = cubiclePositions.filter(p => p.cubicle_id !== data.location.cubicle_id);
+                cubiclePositions.push(data.location);
+                successCount++;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus"></i> Daftarkan ke Palette';
+    }
+
+    if (successCount > 0) {
+        closeModal('addCubicleDesignerModal');
+        showToast(`${successCount} kubikel baru berhasil disimpan di database & siap di palette!`);
+        populateCubicleSuggestions();
+        renderDesigner();
+    } else {
+        showToast('Gagal menambahkan kubikel', 'error');
+    }
+}
+
+window.openDesignerAddCubicleModal = openDesignerAddCubicleModal;
+window.promptAddCustomCubicleToDesigner = openDesignerAddCubicleModal;
+window.quickFillDesignerCubicle = quickFillDesignerCubicle;
+window.submitDesignerAddCubicle = submitDesignerAddCubicle;
