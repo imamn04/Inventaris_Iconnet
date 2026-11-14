@@ -46,8 +46,18 @@ async function remove(req, res, next) {
 
 async function checkItem(req, res, next) {
   try {
-    const { searchValue } = req.body;
-    const result = await inventoryService.checkItemScan(searchValue);
+    const { searchValue, kondisi, action } = req.body;
+    const result = await inventoryService.checkItemScan(searchValue, kondisi, action);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleChecklist(req, res, next) {
+  try {
+    const { id, status } = req.body;
+    const result = await inventoryService.toggleItemChecklist(id, status);
     res.json(result);
   } catch (err) {
     next(err);
@@ -93,7 +103,7 @@ async function assignCubicle(req, res, next) {
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Item tidak ditemukan' });
     }
-    res.json({ success: true, message: `Item berhasil di-assign ke ${cubicle_id || 'Unassigned'}` });
+    res.json({ success: true, message: `Item berhasil di-assign ke ${cubicle_id || 'Unassigned'}`, item: updated });
   } catch (err) {
     next(err);
   }
@@ -105,6 +115,7 @@ module.exports = {
   update,
   remove,
   checkItem,
+  toggleChecklist,
   resetChecklist,
   bulkDelete,
   importItems,

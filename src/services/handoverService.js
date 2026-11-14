@@ -33,6 +33,11 @@ async function getAllHandover() {
     catatan: r.catatan,
     no_berita_acara: r.noBeritaAcara,
     signature: r.signature,
+    nip: r.nip,
+    email: r.email,
+    hp: r.hp,
+    checklist: r.checklist,
+    photos: r.photos,
     timestamp: r.timestamp
   }));
 }
@@ -60,28 +65,94 @@ async function createHandover(data) {
       lokasiBaru: data.lokasiBaru || '',
       catatan: data.catatan || '',
       noBeritaAcara: data.noBeritaAcara || '',
-      signature: data.signature || ''
+      signature: data.signature || '',
+      nip: data.nip || '',
+      email: data.email || '',
+      hp: data.hp || '',
+      checklist: data.checklist || '',
+      photos: typeof data.photos === 'object' ? JSON.stringify(data.photos) : (data.photos || '')
     }
   });
 
-  // Sync inventory item's location and cubicleId if lokasiBaru is provided
-  if (data.itemId && data.lokasiBaru && String(data.lokasiBaru).trim()) {
-    try {
-      const newLokasi = String(data.lokasiBaru).trim();
-      const extractedCubicle = extractCubicleId(newLokasi);
-      const updatePayload = { lokasi: newLokasi };
-      if (extractedCubicle) {
-        updatePayload.cubicleId = extractedCubicle;
-      } else if (newLokasi === '-') {
-        updatePayload.cubicleId = '';
-      }
-      await prisma.inventory.update({
-        where: { id: data.itemId },
-        data: updatePayload
-      });
-    } catch (errSync) {
-      console.warn('[Handover Sync] Gagal memperbarui lokasi item:', errSync.message);
+  // SMART HANDOVER SYNC: Sinkronisasi Otomatis 2 Arah Status, Lokasi & Meja Inventaris
+  try {
+    let targetItemId = data.itemId;
+    let invItem = null;
+
+    if (targetItemId) {
+      invItem = await prisma.inventory.findUnique({ where: { id: targetItemId } });
     }
+    if (!invItem && data.itemSn) {
+      invItem = await prisma.inventory.findFirst({ where: { sn: data.itemSn } });
+      if (invItem) targetItemId = invItem.id;
+    }
+
+    if (invItem && targetItemId) {
+      const isPenyerahan = (data.jenis || '').toLowerCase().includes('serah') || (data.jenis || '').toLowerCase().includes('penyerahan');
+      const isPengembalian = (data.jenis || '').toLowerCase().includes('terima') || (data.jenis || '').toLowerCase().includes('pengembalian');
+
+      const updatePayload = {};
+      const newLokasi = String(data.lokasiBaru || '').trim();
+      const extractedCubicle = extractCubicleId(newLokasi);
+
+      // Pastikan lokasi dan kubikel selalu sinkron ke Master Inventaris
+      if (newLokasi && newLokasi !== '-') {
+        updatePayload.lokasi = newLokasi;
+        if (extractedCubicle) {
+          updatePayload.cubicleId = extractedCubicle;
+        }
+      }
+
+      if (data.kondisiAfter && String(data.kondisiAfter).trim()) {
+        updatePayload.kondisiAfter = String(data.kondisiAfter).trim();
+      }
+
+      if (isPenyerahan) {
+        if (!updatePayload.lokasi) {
+          updatePayload.lokasi = `Digunakan ${data.pihakPenerima || 'User'}`;
+        }
+        updatePayload.catatan = `Digunakan oleh: ${data.pihakPenerima || '-'} (BAST: ${data.noBeritaAcara || '-'})`;
+
+        await prisma.history.create({
+          data: {
+            action: 'MUTASI_PENYERAHAN',
+            itemId: targetItemId,
+            itemName: invItem.name || data.itemName,
+            itemMerk: invItem.merk || data.itemMerk,
+            itemSn: invItem.sn || data.itemSn,
+            itemLokasi: updatePayload.lokasi || invItem.lokasi,
+            details: `Penyerahan perangkat kepada ${data.pihakPenerima || '-'} (NIP: ${data.nip || '-'}). No. BA: ${data.noBeritaAcara || '-'}`
+          }
+        });
+      } else if (isPengembalian) {
+        if (!updatePayload.lokasi) {
+          updatePayload.lokasi = 'Gudang IT (Standby)';
+          updatePayload.cubicleId = '';
+        }
+        updatePayload.catatan = `Dikembalikan oleh: ${data.pihakPenyerah || '-'} (BAST: ${data.noBeritaAcara || '-'})`;
+
+        await prisma.history.create({
+          data: {
+            action: 'MUTASI_PENGEMBALIAN',
+            itemId: targetItemId,
+            itemName: invItem.name || data.itemName,
+            itemMerk: invItem.merk || data.itemMerk,
+            itemSn: invItem.sn || data.itemSn,
+            itemLokasi: updatePayload.lokasi || invItem.lokasi,
+            details: `Pengembalian perangkat ke gudang IT dari ${data.pihakPenyerah || '-'}. Kondisi: ${data.kondisiAfter || '-'}. No. BA: ${data.noBeritaAcara || '-'}`
+          }
+        });
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await prisma.inventory.update({
+          where: { id: targetItemId },
+          data: updatePayload
+        });
+      }
+    }
+  } catch (errSync) {
+    console.warn('[Smart Handover Sync] Peringatan sinkronisasi aset:', errSync.message);
   }
 
   return created;
@@ -100,9 +171,151 @@ async function bulkDeleteHandover(ids) {
   return { count: result.count };
 }
 
+async function getHandoverById(id) {
+  const numericId = parseInt(id, 10);
+  if (isNaN(numericId)) return null;
+
+  const r = await prisma.handover.findUnique({
+    where: { id: numericId }
+  });
+  if (!r) return null;
+
+  return {
+    id: r.id,
+    jenis: r.jenis,
+    item_id: r.itemId,
+    item_name: r.itemName,
+    item_merk: r.itemMerk,
+    item_sn: r.itemSn,
+    item_sn_converter: r.itemSnConverter,
+    pihak_penyerah: r.pihakPenyerah,
+    pihak_penerima: r.pihakPenerima,
+    tanggal_serah_terima: r.tanggalSerahTerima ? r.tanggalSerahTerima.toISOString().split('T')[0] : null,
+    kondisi_before: r.kondisiBefore,
+    kondisi_after: r.kondisiAfter,
+    lokasi_baru: r.lokasiBaru,
+    catatan: r.catatan,
+    no_berita_acara: r.noBeritaAcara,
+    signature: r.signature,
+    nip: r.nip,
+    email: r.email,
+    hp: r.hp,
+    checklist: r.checklist,
+    photos: r.photos,
+    timestamp: r.timestamp
+  };
+}
+
+async function updateHandover(id, data) {
+  const numericId = parseInt(id, 10);
+  if (isNaN(numericId)) throw new Error('ID serah terima tidak valid');
+
+  const existing = await prisma.handover.findUnique({
+    where: { id: numericId }
+  });
+  if (!existing) throw new Error('Data serah terima tidak ditemukan');
+
+  let tgl = existing.tanggalSerahTerima;
+  if (data.tanggalSerahTerima) {
+    const d = new Date(data.tanggalSerahTerima);
+    if (!isNaN(d.getTime())) tgl = d;
+  }
+
+  const checklistVal = data.checklist !== undefined
+    ? (Array.isArray(data.checklist) ? data.checklist.join(', ') : String(data.checklist || ''))
+    : existing.checklist;
+
+  const updated = await prisma.handover.update({
+    where: { id: numericId },
+    data: {
+      jenis: data.jenis !== undefined ? data.jenis : existing.jenis,
+      pihakPenyerah: data.pihakPenyerah !== undefined ? data.pihakPenyerah : existing.pihakPenyerah,
+      pihakPenerima: data.pihakPenerima !== undefined ? data.pihakPenerima : existing.pihakPenerima,
+      tanggalSerahTerima: tgl,
+      kondisiBefore: data.kondisiBefore !== undefined ? data.kondisiBefore : existing.kondisiBefore,
+      kondisiAfter: data.kondisiAfter !== undefined ? data.kondisiAfter : existing.kondisiAfter,
+      lokasiBaru: data.lokasiBaru !== undefined ? data.lokasiBaru : existing.lokasiBaru,
+      catatan: data.catatan !== undefined ? data.catatan : existing.catatan,
+      noBeritaAcara: data.noBeritaAcara !== undefined ? data.noBeritaAcara : existing.noBeritaAcara,
+      nip: data.nip !== undefined ? data.nip : existing.nip,
+      email: data.email !== undefined ? data.email : existing.email,
+      hp: data.hp !== undefined ? data.hp : existing.hp,
+      checklist: checklistVal,
+      photos: data.photos !== undefined
+        ? (typeof data.photos === 'object' ? JSON.stringify(data.photos) : String(data.photos || ''))
+        : existing.photos
+    }
+  });
+
+  // Sinkronisasi pembaruan lokasi dan kondisi ke aset inventaris terkait
+  try {
+    const targetItemId = existing.itemId;
+    if (targetItemId) {
+      const invItem = await prisma.inventory.findUnique({ where: { id: targetItemId } });
+      if (invItem) {
+        const updateInvPayload = {};
+        if (data.lokasiBaru && data.lokasiBaru.trim()) {
+          updateInvPayload.lokasi = data.lokasiBaru.trim();
+          const extractedCubicle = extractCubicleId(data.lokasiBaru);
+          if (extractedCubicle) {
+            updateInvPayload.cubicleId = extractedCubicle;
+          }
+        }
+        if (data.kondisiAfter && data.kondisiAfter.trim()) {
+          updateInvPayload.kondisiAfter = data.kondisiAfter.trim();
+        }
+        if (Object.keys(updateInvPayload).length > 0) {
+          await prisma.inventory.update({
+            where: { id: targetItemId },
+            data: updateInvPayload
+          });
+        }
+      }
+    }
+  } catch (syncErr) {
+    console.warn('[Handover Update Sync] Warning:', syncErr.message);
+  }
+
+  return updated;
+}
+
+async function syncAllHandoverLocations() {
+  const allHandovers = await prisma.handover.findMany({
+    orderBy: { timestamp: 'desc' }
+  });
+
+  let syncedCount = 0;
+  const processedItemIds = new Set();
+
+  for (const h of allHandovers) {
+    if (!h.itemId || processedItemIds.has(h.itemId)) continue;
+    processedItemIds.add(h.itemId);
+
+    if (h.lokasiBaru && h.lokasiBaru.trim() && h.lokasiBaru !== '-') {
+      const invItem = await prisma.inventory.findUnique({ where: { id: h.itemId } });
+      if (invItem && invItem.lokasi !== h.lokasiBaru) {
+        const extracted = extractCubicleId(h.lokasiBaru);
+        await prisma.inventory.update({
+          where: { id: h.itemId },
+          data: {
+            lokasi: h.lokasiBaru,
+            ...(extracted ? { cubicleId: extracted } : {})
+          }
+        });
+        syncedCount++;
+      }
+    }
+  }
+
+  return { success: true, syncedCount };
+}
+
 module.exports = {
   getAllHandover,
+  getHandoverById,
   createHandover,
-  bulkDeleteHandover
+  updateHandover,
+  bulkDeleteHandover,
+  syncAllHandoverLocations
 };
 

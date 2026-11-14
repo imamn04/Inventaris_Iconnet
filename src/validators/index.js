@@ -46,7 +46,14 @@ const bulkDeleteSchema = z.object({
 });
 
 const checkInventorySchema = z.object({
-  searchValue: z.string().min(1, 'Kode pencarian / SN wajib diisi').trim()
+  searchValue: z.string().min(1, 'Kode pencarian / SN wajib diisi').trim(),
+  kondisi: z.string().optional().nullable(),
+  action: z.enum(['check', 'uncheck', 'toggle']).optional()
+});
+
+const toggleChecklistSchema = z.object({
+  id: z.string().min(1, 'ID inventaris wajib diisi').trim(),
+  status: z.enum(['Ya', 'Tidak']).optional()
 });
 
 const assignCubicleSchema = z.object({
@@ -70,6 +77,11 @@ const cubiclePositionsBulkSchema = z.object({
   positions: z.array(cubiclePositionSchema)
 });
 
+const addLocationSchema = z.object({
+  name: z.string().min(1, 'Nama lokasi wajib diisi').max(50, 'Nama lokasi maksimal 50 karakter').trim(),
+  type: z.enum(['cubicle', 'room']).optional().default('cubicle')
+});
+
 const handoverSchema = z.object({
   jenis: z.string().optional().nullable().default('Serah Terima'),
   itemId: z.string().min(1, 'Item ID wajib diisi'),
@@ -85,7 +97,12 @@ const handoverSchema = z.object({
   lokasiBaru: z.string().optional().nullable().default(''),
   catatan: z.string().optional().nullable().default(''),
   noBeritaAcara: z.string().optional().nullable().default(''),
-  signature: z.string().optional().nullable().default('')
+  signature: z.string().optional().nullable().default(''),
+  nip: z.string().optional().nullable().default(''),
+  email: z.string().optional().nullable().default(''),
+  hp: z.string().optional().nullable().default(''),
+  checklist: z.union([z.string(), z.array(z.string())]).optional().nullable(),
+  photos: z.union([z.string(), z.array(z.string())]).optional().nullable()
 });
 
 module.exports = {
@@ -94,10 +111,12 @@ module.exports = {
   inventoryUpdateSchema,
   bulkDeleteSchema,
   checkInventorySchema,
+  toggleChecklistSchema,
   assignCubicleSchema,
   categorySchema,
   cubiclePositionSchema,
   cubiclePositionsBulkSchema,
+  addLocationSchema,
   handoverSchema
 };
 

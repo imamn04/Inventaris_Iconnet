@@ -33,6 +33,7 @@ model Inventory {
   tanggalMasuk  DateTime? @map("tanggal_masuk") @db.Date
   snConverter   String?   @map("sn_converter")
   cubicleId     String?   @map("cubicle_id")
+  checkTime     DateTime? @map("check_time") @db.Timestamp(6)
 
   @@map("inventory")
 }
@@ -65,6 +66,11 @@ model Handover {
   itemSnConverter    String?   @map("item_sn_converter")
   noBeritaAcara      String?   @map("no_berita_acara") @db.VarChar(100)
   signature          String?
+  nip                String?
+  email              String?
+  hp                 String?
+  checklist          String?
+  photos             String?
 
   @@map("handover")
 }

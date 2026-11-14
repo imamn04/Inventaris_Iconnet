@@ -74,13 +74,28 @@ async function getAllInventory() {
 }
 
 async function createInventoryItem(data) {
-  // Generate next ID
-  const maxResult = await prisma.inventory.aggregate({
-    _max: { no: true }
+  // Generate next sequential ID safe against collisions
+  const existingItems = await prisma.inventory.findMany({
+    select: { no: true, id: true }
   });
-  const maxNo = maxResult._max.no || 0;
-  const nextNo = maxNo + 1;
-  const id = data.id || `INV-${String(nextNo).padStart(3, '0')}`;
+  const usedIds = new Set(existingItems.map(i => i.id));
+  const maxNo = existingItems.reduce((max, i) => Math.max(max, i.no || 0), 0);
+  let nextNo = maxNo + 1;
+
+  let id = data.id ? String(data.id).trim() : '';
+  if (id) {
+    const match = id.match(/INV-(\d+)/i);
+    if (match) {
+      nextNo = parseInt(match[1], 10);
+    }
+  } else {
+    let candidateId = `INV-${String(nextNo).padStart(3, '0')}`;
+    while (usedIds.has(candidateId)) {
+      nextNo++;
+      candidateId = `INV-${String(nextNo).padStart(3, '0')}`;
+    }
+    id = candidateId;
+  }
 
   let qrCode = data.qrCode || '';
   if (qrCode && qrCode.startsWith('data:image/png;base64,')) {
@@ -192,6 +207,40 @@ async function updateInventoryItem(id, data) {
   });
 
   const mapped = mapInventory(updated);
+
+  // SINKRONISASI 2-ARAH OTOMATIS: Sinkronkan perubahan lokasi & kondisi fisik ke Dokumen BAST Terakhir
+  if (data.lokasi !== undefined || data.kondisiAfter !== undefined) {
+    try {
+      const latestHandover = await prisma.handover.findFirst({
+        where: {
+          OR: [
+            { itemId: id },
+            { itemSn: updated.sn }
+          ]
+        },
+        orderBy: { timestamp: 'desc' }
+      });
+
+      if (latestHandover) {
+        const handoverUpdate = {};
+        if (data.lokasi !== undefined && String(data.lokasi).trim()) {
+          handoverUpdate.lokasiBaru = String(data.lokasi).trim();
+        }
+        if (data.kondisiAfter !== undefined && String(data.kondisiAfter).trim()) {
+          handoverUpdate.kondisiAfter = String(data.kondisiAfter).trim();
+        }
+        if (Object.keys(handoverUpdate).length > 0) {
+          await prisma.handover.update({
+            where: { id: latestHandover.id },
+            data: handoverUpdate
+          });
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Inventory -> Handover 2-Way Sync] Warning:', syncErr.message);
+    }
+  }
+
   // Jangan catat log UPDATE jika request ini semata-mata adalah penyimpanan QR Code inisial
   const isQrOnlyUpdate = Object.keys(data).every(k => k === 'qrCode' || k === 'id');
   if (!isQrOnlyUpdate) {
@@ -204,13 +253,23 @@ async function deleteInventoryItem(id) {
   const item = await prisma.inventory.findUnique({ where: { id } });
   if (!item) return false;
 
+  // Bersihkan file fisik barcode di disk agar tidak menjadi file yatim/menumpuk
+  try {
+    const barcodePath = path.join(process.cwd(), 'barcode', `${id}.png`);
+    if (fs.existsSync(barcodePath)) {
+      fs.unlinkSync(barcodePath);
+    }
+  } catch (fileErr) {
+    console.warn(`[Inventory] Warning saat menghapus file barcode ${id}:`, fileErr.message);
+  }
+
   await prisma.inventory.delete({ where: { id } });
   const mapped = mapInventory(item);
   await logHistory('DELETE', mapped, `Menghapus item: ${mapped.name} (${id})`);
   return true;
 }
 
-async function checkItemScan(searchValue) {
+async function checkItemScan(searchValue, newKondisi = null, action = 'check') {
   if (!searchValue) {
     return { success: false, status: 'not_found' };
   }
@@ -219,7 +278,6 @@ async function checkItemScan(searchValue) {
   const searchValues = new Set();
   if (raw) searchValues.add(raw);
 
-  // 1. Parse JSON if scanned QR contains JSON object
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
@@ -227,11 +285,8 @@ async function checkItemScan(searchValue) {
       if (parsed.sn) searchValues.add(String(parsed.sn).trim());
       if (parsed.sn_converter) searchValues.add(String(parsed.sn_converter).trim());
     }
-  } catch (e) {
-    // Not JSON
-  }
+  } catch (e) {}
 
-  // 2. Check pipe-delimited format
   if (raw.includes('|')) {
     raw.split('|').forEach(part => {
       const p = part.trim();
@@ -239,7 +294,6 @@ async function checkItemScan(searchValue) {
     });
   }
 
-  // 3. Extract standard INV pattern (e.g. INV-001, INV-050)
   const invMatch = raw.match(/INV-?\d+/i);
   if (invMatch) {
     searchValues.add(invMatch[0]);
@@ -250,7 +304,6 @@ async function checkItemScan(searchValue) {
     }
   }
 
-  // Build OR conditions with case-insensitive matching
   const conditions = [];
   for (const val of searchValues) {
     conditions.push({ id: { equals: val, mode: 'insensitive' } });
@@ -259,37 +312,76 @@ async function checkItemScan(searchValue) {
   }
 
   const item = await prisma.inventory.findFirst({
-    where: {
-      OR: conditions
-    }
+    where: { OR: conditions }
   });
 
   if (!item) {
     return { success: false, status: 'not_found' };
   }
 
-  const isAlreadyChecked = (item.checklist || '').trim() === 'Ya';
-  if (!isAlreadyChecked) {
-    const now = new Date();
-    const updated = await prisma.inventory.update({
-      where: { id: item.id },
-      data: {
-        checklist: 'Ya'
-      }
-    });
+  const alreadyChecked = item.checklist === 'Ya';
+  const now = new Date();
 
-    await logHistory('UPDATE', { id: item.id, name: item.name }, `Melakukan check inventaris: ${item.id}`);
-    return {
-      success: true,
-      status: 'found',
-      item: mapInventory(updated)
-    };
+  let targetChecklist = 'Ya';
+  let targetCheckTime = now;
+  if (action === 'uncheck') {
+    targetChecklist = 'Tidak';
+    targetCheckTime = null;
+  } else if (action === 'toggle') {
+    targetChecklist = alreadyChecked ? 'Tidak' : 'Ya';
+    targetCheckTime = alreadyChecked ? null : now;
   }
+
+  const updateData = {
+    checklist: targetChecklist,
+    checkTime: targetCheckTime
+  };
+  if (newKondisi && String(newKondisi).trim()) {
+    updateData.kondisiAfter = String(newKondisi).trim();
+  }
+
+  const updated = await prisma.inventory.update({
+    where: { id: item.id },
+    data: updateData
+  });
+
+  await logHistory('UPDATE', { id: item.id, name: item.name }, `Melakukan check inventaris: ${item.id} (Status: ${targetChecklist}, Kondisi: ${newKondisi || item.kondisiAfter || 'Tanpa Perubahan'})`);
+  return {
+    success: true,
+    status: alreadyChecked ? 'already_checked' : 'first_check',
+    alreadyChecked,
+    checklist: targetChecklist,
+    item: mapInventory(updated)
+  };
+}
+
+async function toggleItemChecklist(id, status = null) {
+  const item = await prisma.inventory.findUnique({
+    where: { id: String(id) }
+  });
+
+  if (!item) {
+    return { success: false, message: 'Barang tidak ditemukan' };
+  }
+
+  const willCheck = status !== undefined && status !== null ? status === 'Ya' : item.checklist !== 'Ya';
+  const updated = await prisma.inventory.update({
+    where: { id: item.id },
+    data: {
+      checklist: willCheck ? 'Ya' : 'Tidak',
+      checkTime: willCheck ? new Date() : null
+    }
+  });
+
+  await logHistory('UPDATE', { id: item.id, name: item.name },
+    willCheck ? `Status audit fisik di-checklist (Sudah Dicek): ${item.id}` : `Status audit fisik dibatalkan (Belum Dicek): ${item.id}`
+  );
 
   return {
     success: true,
-    status: 'already_checked',
-    item: mapInventory(item)
+    status: willCheck ? 'checked' : 'unchecked',
+    checklist: willCheck ? 'Ya' : 'Tidak',
+    item: mapInventory(updated)
   };
 }
 
@@ -311,6 +403,16 @@ async function bulkDeleteInventory(ids) {
   const items = await prisma.inventory.findMany({
     where: { id: { in: stringIds } }
   });
+
+  // Bersihkan file fisik barcode massal di disk
+  for (const id of stringIds) {
+    try {
+      const barcodePath = path.join(process.cwd(), 'barcode', `${id}.png`);
+      if (fs.existsSync(barcodePath)) {
+        fs.unlinkSync(barcodePath);
+      }
+    } catch (_) {}
+  }
 
   const result = await prisma.inventory.deleteMany({
     where: { id: { in: stringIds } }
@@ -428,6 +530,7 @@ module.exports = {
   updateInventoryItem,
   deleteInventoryItem,
   checkItemScan,
+  toggleItemChecklist,
   resetAllChecklist,
   bulkDeleteInventory,
   importInventoryItems,

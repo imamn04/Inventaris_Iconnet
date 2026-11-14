@@ -19,8 +19,23 @@ async function savePositions(req, res, next) {
   }
 }
 
+async function addLocation(req, res, next) {
+  try {
+    const { name, type } = req.body;
+    const location = await cubicleService.addCustomLocation(name, type || 'cubicle');
+    res.json({
+      success: true,
+      message: `Lokasi "${location.cubicle_id}" berhasil didaftarkan`,
+      location
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getAll,
-  savePositions
+  savePositions,
+  addLocation
 };
 
