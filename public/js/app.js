@@ -1178,13 +1178,15 @@ function fitDashboardMap() {
     // Calculate optimal scale to fit entire floor plan
     const scaleX = (contW - 40) / contentW;
     const scaleY = (contH - 40) / contentH;
-    const optimalScale = Math.max(0.3, Math.min(scaleX, scaleY, 1.1));
+    const optimalScale = Math.max(0.25, Math.min(scaleX, scaleY, 1.1));
 
     dashboardMapState.zoom = optimalScale;
 
-    // Center the content in the viewport
-    dashboardMapState.panX = Math.round((contW - contentW * optimalScale) / 2 - (bounds.minX - 70) * optimalScale);
-    dashboardMapState.panY = Math.round((contH - contentH * optimalScale) / 2 - (bounds.minY - 70) * optimalScale);
+    // Center the content in the viewport (Accurate Geometric Center)
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    dashboardMapState.panX = Math.round((contW / 2) - (centerX * optimalScale));
+    dashboardMapState.panY = Math.round((contH / 2) - (centerY * optimalScale));
 
     applyDashboardMapTransform();
 
@@ -1228,13 +1230,16 @@ function focusDashboardZone(zone) {
         if (p.y > maxY) maxY = p.y;
     });
 
-    const contentW = Math.max(200, (maxX - minX) + 100);
-    const contentH = Math.max(200, (maxY - minY) + 100);
+    const contentW = Math.max(200, (maxX - minX) + 80);
+    const contentH = Math.max(200, (maxY - minY) + 80);
 
-    const scale = Math.max(0.5, Math.min((contW - 60) / contentW, (contH - 60) / contentH, 1.25));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const scale = Math.max(0.4, Math.min((contW - 30) / contentW, (contH - 30) / contentH, 1.3));
     dashboardMapState.zoom = scale;
-    dashboardMapState.panX = Math.round((contW - contentW * scale) / 2 - (minX - 50) * scale);
-    dashboardMapState.panY = Math.round((contH - contentH * scale) / 2 - (minY - 50) * scale);
+    dashboardMapState.panX = Math.round((contW / 2) - (centerX * scale));
+    dashboardMapState.panY = Math.round((contH / 2) - (centerY * scale));
 
     applyDashboardMapTransform();
 }
@@ -1287,6 +1292,7 @@ function setupDashboardMapPanListeners(container) {
     if (isPanListenerAttached || !container) return;
     isPanListenerAttached = true;
 
+    // Mouse drag support
     container.addEventListener('mousedown', (e) => {
         if (e.target.closest('.cubicle-view') || e.target.closest('button')) return;
         dashboardMapState.isDragging = true;
@@ -1316,6 +1322,61 @@ function setupDashboardMapPanListeners(container) {
         const delta = e.deltaY < 0 ? 0.08 : -0.08;
         zoomDashboardMap(delta);
     }, { passive: false });
+
+    // Multi-Touch Support: 1-Finger Pan & 2-Finger Pinch Zoom (Mobile Native)
+    let touchStartDist = null;
+    let touchStartZoom = 1;
+
+    container.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            dashboardMapState.isDragging = true;
+            dashboardMapState.hasUserInteracted = true;
+            dashboardMapState.dragStartX = e.touches[0].clientX - dashboardMapState.panX;
+            dashboardMapState.dragStartY = e.touches[0].clientY - dashboardMapState.panY;
+        } else if (e.touches.length === 2) {
+            dashboardMapState.isDragging = false;
+            touchStartDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            touchStartZoom = dashboardMapState.zoom;
+        }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && dashboardMapState.isDragging) {
+            const newPanX = e.touches[0].clientX - dashboardMapState.dragStartX;
+            const newPanY = e.touches[0].clientY - dashboardMapState.dragStartY;
+            if (Math.abs(newPanX - dashboardMapState.panX) > 2 || Math.abs(newPanY - dashboardMapState.panY) > 2) {
+                if (e.cancelable) e.preventDefault();
+                dashboardMapState.panX = newPanX;
+                dashboardMapState.panY = newPanY;
+                applyDashboardMapTransform();
+            }
+        } else if (e.touches.length === 2 && touchStartDist) {
+            if (e.cancelable) e.preventDefault();
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const scaleFactor = currentDist / touchStartDist;
+            const newZoom = Math.max(0.2, Math.min(2.5, touchStartZoom * scaleFactor));
+            dashboardMapState.zoom = newZoom;
+            applyDashboardMapTransform();
+        }
+    }, { passive: false });
+
+    container.addEventListener('touchend', (e) => {
+        if (e.touches.length === 0) {
+            dashboardMapState.isDragging = false;
+            touchStartDist = null;
+        } else if (e.touches.length === 1) {
+            touchStartDist = null;
+            dashboardMapState.isDragging = true;
+            dashboardMapState.dragStartX = e.touches[0].clientX - dashboardMapState.panX;
+            dashboardMapState.dragStartY = e.touches[0].clientY - dashboardMapState.panY;
+        }
+    }, { passive: true });
 }
 
 // Idea 2: Smart Highlight Search
@@ -8392,6 +8453,15 @@ function renderNormalView() {
     if (poolCountBadge) poolCountBadge.textContent = unassigned.length;
     if (poolToggleText) poolToggleText.textContent = `Barang (${unassigned.length})`;
 
+    // Auto-collapse sidebar on mobile screen on initial entry (Native Drawer Pattern)
+    if (window.innerWidth <= 768 && !mapViewState.hasUserInteracted) {
+        mapViewState.isSidebarCollapsed = true;
+        const sidebar = document.getElementById('mapPoolSidebar');
+        const btn = document.getElementById('btnTogglePoolSidebar');
+        if (sidebar) sidebar.classList.add('collapsed');
+        if (btn) btn.classList.add('active');
+    }
+
     if (unassigned.length === 0) {
         poolContainer.innerHTML = `
             <div style="text-align: center; padding: 30px 15px; color: var(--text-secondary);">
@@ -8633,11 +8703,15 @@ function fitMapViewMap() {
 
     const scaleX = (contW - 40) / contentW;
     const scaleY = (contH - 40) / contentH;
-    const optimalScale = Math.max(0.3, Math.min(scaleX, scaleY, 1.15));
+    const optimalScale = Math.max(0.25, Math.min(scaleX, scaleY, 1.15));
 
     mapViewState.zoom = optimalScale;
-    mapViewState.panX = Math.round((contW - contentW * optimalScale) / 2 - (bounds.minX - 70) * optimalScale);
-    mapViewState.panY = Math.round((contH - contentH * optimalScale) / 2 - (bounds.minY - 70) * optimalScale);
+
+    // Geometric Center in Viewport
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    mapViewState.panX = Math.round((contW / 2) - (centerX * optimalScale));
+    mapViewState.panY = Math.round((contH / 2) - (centerY * optimalScale));
 
     applyMapViewTransform();
 
@@ -8683,13 +8757,16 @@ function focusMapViewZone(zone) {
         if (p.y > maxY) maxY = p.y;
     });
 
-    const contentW = Math.max(200, (maxX - minX) + 100);
-    const contentH = Math.max(200, (maxY - minY) + 100);
+    const contentW = Math.max(200, (maxX - minX) + 80);
+    const contentH = Math.max(200, (maxY - minY) + 80);
 
-    const scale = Math.max(0.5, Math.min((contW - 60) / contentW, (contH - 60) / contentH, 1.25));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const scale = Math.max(0.4, Math.min((contW - 30) / contentW, (contH - 30) / contentH, 1.3));
     mapViewState.zoom = scale;
-    mapViewState.panX = Math.round((contW - contentW * scale) / 2 - (minX - 50) * scale);
-    mapViewState.panY = Math.round((contH - contentH * scale) / 2 - (minY - 50) * scale);
+    mapViewState.panX = Math.round((contW / 2) - (centerX * scale));
+    mapViewState.panY = Math.round((contH / 2) - (centerY * scale));
 
     applyMapViewTransform();
 }
@@ -8759,6 +8836,7 @@ function setupMapViewPanListeners(viewport) {
     if (isMapViewPanListenerAttached || !viewport) return;
     isMapViewPanListenerAttached = true;
 
+    // Mouse drag support
     viewport.addEventListener('mousedown', (e) => {
         if (e.target.closest('.cubicle-view') || e.target.closest('button')) return;
         mapViewState.isDragging = true;
@@ -8788,6 +8866,61 @@ function setupMapViewPanListeners(viewport) {
         const delta = e.deltaY < 0 ? 0.08 : -0.08;
         zoomMapViewMap(delta);
     }, { passive: false });
+
+    // Multi-Touch Support: 1-Finger Pan & 2-Finger Pinch Zoom (Mobile Native)
+    let touchStartDist = null;
+    let touchStartZoom = 1;
+
+    viewport.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            mapViewState.isDragging = true;
+            mapViewState.hasUserInteracted = true;
+            mapViewState.dragStartX = e.touches[0].clientX - mapViewState.panX;
+            mapViewState.dragStartY = e.touches[0].clientY - mapViewState.panY;
+        } else if (e.touches.length === 2) {
+            mapViewState.isDragging = false;
+            touchStartDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            touchStartZoom = mapViewState.zoom;
+        }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && mapViewState.isDragging) {
+            const newPanX = e.touches[0].clientX - mapViewState.dragStartX;
+            const newPanY = e.touches[0].clientY - mapViewState.dragStartY;
+            if (Math.abs(newPanX - mapViewState.panX) > 2 || Math.abs(newPanY - mapViewState.panY) > 2) {
+                if (e.cancelable) e.preventDefault();
+                mapViewState.panX = newPanX;
+                mapViewState.panY = newPanY;
+                applyMapViewTransform();
+            }
+        } else if (e.touches.length === 2 && touchStartDist) {
+            if (e.cancelable) e.preventDefault();
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            const scaleFactor = currentDist / touchStartDist;
+            const newZoom = Math.max(0.2, Math.min(2.5, touchStartZoom * scaleFactor));
+            mapViewState.zoom = newZoom;
+            applyMapViewTransform();
+        }
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', (e) => {
+        if (e.touches.length === 0) {
+            mapViewState.isDragging = false;
+            touchStartDist = null;
+        } else if (e.touches.length === 1) {
+            touchStartDist = null;
+            mapViewState.isDragging = true;
+            mapViewState.dragStartX = e.touches[0].clientX - mapViewState.panX;
+            mapViewState.dragStartY = e.touches[0].clientY - mapViewState.panY;
+        }
+    }, { passive: true });
 }
 
 function highlightMapViewMap() {

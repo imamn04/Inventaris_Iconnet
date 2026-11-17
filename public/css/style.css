@@ -9401,10 +9401,13 @@ td .btn-excel:hover {
         font-size: 16px !important;
     }
 
-    /* Native-like Slide-Up Bottom Sheet for Modals */
-    .modal {
+    /* Native-like Slide-Up Bottom Sheet for Modals & Overlays */
+    .modal,
+    .modal-overlay {
         align-items: flex-end !important;
+        justify-content: center !important;
         padding: 0 !important;
+        z-index: 12000 !important;
     }
 
     .modal-content,
@@ -9414,18 +9417,35 @@ td .btn-excel:hover {
         max-width: 100% !important;
         margin: 0 !important;
         border-radius: 24px 24px 0 0 !important;
-        max-height: 88vh !important;
-        overflow-y: auto !important;
-        padding: 20px 16px !important;
-        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5) !important;
-        transform: translateY(100%);
-        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        max-height: 85vh !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+        transform: translateY(105%);
+        transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
 
     .modal.show .modal-content,
+    .modal-overlay.show .modal-content,
     .modal.show .scan-result-card,
-    .modal.show .compact-confirm-modal {
+    .modal-overlay.show .scan-result-card,
+    .modal.show .compact-confirm-modal,
+    .modal-overlay.show .compact-confirm-modal {
         transform: translateY(0) !important;
+    }
+
+    .modal-content .modal-body {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 16px !important;
+    }
+
+    .modal-content .modal-footer {
+        padding: 16px !important;
+        padding-bottom: calc(24px + env(safe-area-inset-bottom, 20px)) !important;
     }
 
     /* Bottom Sheet Visual Drag Handle Pill */
@@ -9436,15 +9456,16 @@ td .btn-excel:hover {
         display: block !important;
         width: 44px !important;
         height: 5px !important;
-        background: rgba(255, 255, 255, 0.22) !important;
+        background: rgba(255, 255, 255, 0.35) !important;
         border-radius: 3px !important;
-        margin: 0 auto 16px auto !important;
+        margin: 10px auto 6px auto !important;
+        flex-shrink: 0 !important;
     }
 
     [data-theme="light"] .modal-content::before,
     [data-theme="light"] .scan-result-card::before,
     [data-theme="light"] .compact-confirm-modal::before {
-        background: rgba(0, 0, 0, 0.2) !important;
+        background: rgba(0, 0, 0, 0.25) !important;
     }
 
     /* Scan Modal 2-Column Card into Clean Single Column on Mobile */
@@ -9658,5 +9679,125 @@ td .btn-excel:hover {
         font-size: 11px !important;
         padding: 6px 12px !important;
         border-radius: 8px !important;
+    }
+
+    /* Native Touch Panning Canvas for Floorplans */
+    #dashboardMapViewport,
+    #officeMapViewport,
+    .map-canvas-area,
+    .map-container,
+    #dashboardMiniMap {
+        touch-action: none !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+    }
+
+    /* Visualisasi Denah (map-viewPage) Mobile Optimization */
+    .map-layout-wrapper {
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 0 !important;
+        gap: 12px !important;
+        position: relative !important;
+    }
+
+    .map-canvas-area {
+        width: 100% !important;
+        height: 62vh !important;
+        min-height: 440px !important;
+        padding: 10px !important;
+        border-radius: 16px !important;
+    }
+
+    /* Unassigned Pool Sidebar as Bottom Drawer Sheet on Mobile */
+    .asset-pool-sidebar {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 72vh !important;
+        max-height: 75vh !important;
+        z-index: 1150 !important;
+        border-radius: 24px 24px 0 0 !important;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+        transform: translateY(0) !important;
+        transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+        display: flex !important;
+    }
+
+    .asset-pool-sidebar.collapsed {
+        transform: translateY(105%) !important;
+        width: 100% !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    .asset-pool-sidebar::before {
+        content: "" !important;
+        display: block !important;
+        width: 44px !important;
+        height: 5px !important;
+        background: rgba(255, 255, 255, 0.3) !important;
+        border-radius: 3px !important;
+        margin: 10px auto 4px auto !important;
+        flex-shrink: 0 !important;
+    }
+
+    [data-theme="light"] .asset-pool-sidebar::before {
+        background: rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .btn-close-pool-mobile {
+        display: inline-flex !important;
+    }
+
+    .pool-drag-hint {
+        display: none !important;
+    }
+
+    /* Map View Page Header & Toolbar in Single Row on Mobile */
+    #map-viewPage .dashboard-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    #map-viewPage .header-right {
+        width: 100% !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    #map-viewPage .search-box {
+        flex: 1 !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    #map-viewPage .search-box input {
+        width: 100% !important;
+        font-size: 12px !important;
+        padding: 7px 10px 7px 30px !important;
+    }
+
+    #map-viewPage #btnTogglePoolSidebar {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        padding: 7px 12px !important;
+        font-size: 11.5px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 5px !important;
+        border-radius: 8px !important;
+    }
+
+    /* Legend Card & Spacing on Mobile */
+    .dashboard-map-section {
+        margin: 12px 0 20px 0 !important;
     }
 }

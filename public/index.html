@@ -94,7 +94,7 @@
     <link rel="apple-touch-icon" href="img/logo1.png">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="css/style.css?v=4.2.1">
+    <link rel="stylesheet" href="css/style.css?v=4.3.1">
 </head>
 
 <body>
@@ -1368,7 +1368,13 @@
                                     <span id="poolCountBadge" class="filter-count-badge"
                                         style="background: var(--primary); color: #fff;">0</span>
                                 </div>
-                                <span style="font-size: 10px; color: var(--text-tertiary);">Drag ke denah</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="pool-drag-hint" style="font-size: 10px; color: var(--text-tertiary);">Drag ke denah</span>
+                                    <button type="button" class="btn-close-pool-mobile" onclick="toggleMapViewSidebar()" title="Tutup Panel"
+                                        style="display: none; background: rgba(255,255,255,0.1); border: 1px solid var(--border); border-radius: 6px; width: 28px; height: 28px; align-items: center; justify-content: center; color: var(--text-primary); cursor: pointer;">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div
                                 style="padding: 10px 14px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1);">
@@ -3322,7 +3328,7 @@
     </nav>
 
     <!-- Custom JavaScript -->
-    <script src="js/app.js?v=4.2.1"></script>
+    <script src="js/app.js?v=4.3.1"></script>
 </body>
 
 </html>
