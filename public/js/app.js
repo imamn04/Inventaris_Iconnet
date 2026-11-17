@@ -6770,171 +6770,615 @@ function generateBA_pdf(id) {
     document.body.removeChild(link);
 }
 
+function formatTerbilang(angka) {
+    const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+    angka = parseInt(angka, 10);
+    if (isNaN(angka)) return '';
+    if (angka < 12) return bilangan[angka];
+    if (angka < 20) return formatTerbilang(angka - 10) + ' Belas';
+    if (angka < 100) return formatTerbilang(Math.floor(angka / 10)) + ' Puluh ' + (angka % 10 !== 0 ? formatTerbilang(angka % 10) : '');
+    if (angka < 200) return 'Seratus ' + (angka % 100 !== 0 ? formatTerbilang(angka - 100) : '');
+    if (angka < 1000) return formatTerbilang(Math.floor(angka / 100)) + ' Ratus ' + (angka % 100 !== 0 ? formatTerbilang(angka % 100) : '');
+    if (angka < 2000) return 'Seribu ' + (angka % 1000 !== 0 ? formatTerbilang(angka - 1000) : '');
+    if (angka < 1000000) return formatTerbilang(Math.floor(angka / 1000)) + ' Ribu ' + (angka % 1000 !== 0 ? formatTerbilang(angka % 1000) : '');
+    return String(angka);
+}
+
 async function generateBA_excel(id) {
-    const data = handoverData.find(h => h.id == id);
+    let data = handoverData.find(h => h.id == id);
     if (!data) {
-        showToast('Data tidak ditemukan!', true);
+        try {
+            const res = await fetch(`/api/handover/${id}`);
+            if (res.ok) data = await res.json();
+        } catch (e) {}
+    }
+    if (!data) {
+        showToast('Data serah terima tidak ditemukan!', true);
         return;
     }
 
-    showToast('Sedang menyiapkan file Excel...');
+    showToast('Sedang menyiapkan Berita Acara Excel resmi...');
 
     try {
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('BA Serah Terima');
+        workbook.creator = 'PLN Icon Plus';
+        workbook.lastModifiedBy = 'PLN Icon Plus System';
+        workbook.created = new Date();
+        workbook.modified = new Date();
 
-        const tglFormat = formatTanggalIndonesia(data.tanggal_serah_terima);
-        const nomorBA = data.no_berita_acara || generateNomorBA(data.tanggal_serah_terima, data.id);
+        const worksheet = workbook.addWorksheet('Berita Acara', {
+            views: [{ showGridLines: true }]
+        });
 
-        // Set columns
+        // 6 Kolom Utama (Presisi Layout A4 Cetak Portrait)
         worksheet.columns = [
-            { width: 35 }, // A: Keterangan
-            { width: 55 }  // B: Detail
+            { key: 'colA', width: 7 },   // A: No / Indent
+            { key: 'colB', width: 22 },  // B: Nama Barang / Label Identitas
+            { key: 'colC', width: 24 },  // C: Merk / Kolom Tengah
+            { key: 'colD', width: 24 },  // D: Serial Number / Kolom Tengah
+            { key: 'colE', width: 11 },  // E: Quantity / Kolom Kanan
+            { key: 'colF', width: 13 }   // F: Satuan / Kolom Kanan
         ];
 
-        // 1. HEADER SECTION
-        // Add Logo if possible
-        try {
-            const logoResponse = await fetch('img/logo1.png');
-            if (logoResponse.ok) {
-                const logoBuffer = await logoResponse.arrayBuffer();
-                const logoId = workbook.addImage({
-                    buffer: logoBuffer,
-                    extension: 'png',
-                });
-                // Place logo in top right
-                worksheet.addImage(logoId, {
-                    tl: { col: 1.6, row: 0.1 },
-                    ext: { width: 100, height: 35 }
-                });
+        // Border Helpers
+        const thinBorder = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+
+        function setRangeBorder(startRow, startCol, endRow, endCol, border = thinBorder) {
+            for (let r = startRow; r <= endRow; r++) {
+                for (let c = startCol; c <= endCol; c++) {
+                    worksheet.getCell(r, c).border = border;
+                }
             }
-        } catch (e) {
-            console.warn('Failed to load logo for Excel:', e);
         }
 
-        // Title
-        worksheet.mergeCells('A1:B1');
-        const titleCell = worksheet.getCell('A1');
-        titleCell.value = 'BERITA ACARA SERAH TERIMA BARANG';
-        titleCell.font = { name: 'Arial', bold: true, size: 16, color: { argb: 'FF1E293B' } };
-        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        function setBoxOutline(startRow, startCol, endRow, endCol) {
+            for (let r = startRow; r <= endRow; r++) {
+                for (let c = startCol; c <= endCol; c++) {
+                    const cell = worksheet.getCell(r, c);
+                    const b = { ...(cell.border || {}) };
+                    if (r === startRow) b.top = { style: 'thin', color: { argb: 'FF000000' } };
+                    if (r === endRow) b.bottom = { style: 'thin', color: { argb: 'FF000000' } };
+                    if (c === startCol) b.left = { style: 'thin', color: { argb: 'FF000000' } };
+                    if (c === endCol) b.right = { style: 'thin', color: { argb: 'FF000000' } };
+                    cell.border = b;
+                }
+            }
+        }
+
+        // Variabel Identitas & Tanggal Format Resmi Terbilang
+        const tgl = data.tanggal_serah_terima || data.tanggalSerahTerima ? new Date(data.tanggal_serah_terima || data.tanggalSerahTerima) : new Date();
+        const hariArr = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+        const bulanArr = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+        const namaHari = hariArr[tgl.getDay()] || 'Senin';
+        const tglNum = tgl.getDate();
+        const namaBulan = bulanArr[tgl.getMonth()] || 'Januari';
+        const tahunNum = tgl.getFullYear();
+        const tanggalTerbilang = formatTerbilang(tglNum).trim();
+        const tahunTerbilang = formatTerbilang(tahunNum).trim();
+        const tglNumerik = String(tglNum).padStart(2, '0') + '-' + String(tgl.getMonth() + 1).padStart(2, '0') + '-' + tahunNum;
+
+        const nomorBA = data.no_berita_acara || data.noBeritaAcara || generateNomorBA(data.tanggal_serah_terima, data.id);
+        const rawItemName = (data.item_name || data.itemName || 'LAPTOP').toUpperCase();
+        const titleItem = rawItemName.includes('LAPTOP') ? 'LAPTOP' : (rawItemName.includes('MONITOR') ? 'MONITOR' : (rawItemName.includes('PC') ? 'PC / DESKTOP' : rawItemName));
+
+        // 1. HEADER SECTION (Logo & Pita Dekorasi Resmi PLN Icon Plus)
         worksheet.getRow(1).height = 30;
+        try {
+            const decorRes = await fetch('img/bast_header_decor.png');
+            if (decorRes.ok) {
+                const decorBuf = await decorRes.arrayBuffer();
+                const decorId = workbook.addImage({ buffer: decorBuf, extension: 'png' });
+                worksheet.addImage(decorId, {
+                    tl: { col: 0, row: 0 },
+                    ext: { width: 280, height: 22 }
+                });
+            }
+        } catch (e) {}
 
-        worksheet.mergeCells('A2:B2');
-        const companyCell = worksheet.getCell('A2');
-        companyCell.value = 'ICONNET';
-        companyCell.font = { name: 'Arial', bold: true, size: 14, color: { argb: 'FF4F46E5' } };
-        companyCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        worksheet.getRow(2).height = 25;
+        try {
+            const logoRes = await fetch('img/pln_icon_plus.png');
+            if (logoRes.ok) {
+                const logoBuf = await logoRes.arrayBuffer();
+                const logoId = workbook.addImage({ buffer: logoBuf, extension: 'png' });
+                worksheet.addImage(logoId, {
+                    tl: { col: 4.0, row: 0.1 },
+                    ext: { width: 125, height: 38 }
+                });
+            }
+        } catch (e) {}
 
-        worksheet.mergeCells('A3:B3');
-        const noCell = worksheet.getCell('A3');
-        noCell.value = 'No: ' + nomorBA;
-        noCell.font = { name: 'Arial', size: 10 };
-        noCell.alignment = { horizontal: 'center' };
+        worksheet.getRow(2).height = 10;
 
-        // 2. OPENING SECTION
-        worksheet.addRow([]);
-        const openingRow = worksheet.addRow(['Pada hari ini, tanggal ' + tglFormat + ', telah dilakukan serah terima barang sebagai berikut:']);
-        worksheet.mergeCells(`A${openingRow.number}:B${openingRow.number}`);
-        openingRow.getCell(1).font = { name: 'Arial', size: 11 };
-        openingRow.getCell(1).alignment = { wrapText: true, vertical: 'middle' };
-        openingRow.height = 30;
+        // 2. KOTAK 1: JUDUL BERITA ACARA & NOMOR DOKUMEN
+        worksheet.mergeCells('A3:F3');
+        const cTitle = worksheet.getCell('A3');
+        cTitle.value = `BERITA ACARA SERAH TERIMA ${titleItem}`;
+        cTitle.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
+        cTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(3).height = 19;
 
-        worksheet.addRow([]);
+        worksheet.mergeCells('A4:F4');
+        const cSite = worksheet.getCell('A4');
+        cSite.value = 'CONTACT CENTER RITEL SITE SEMARANG';
+        cSite.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FF000000' } };
+        cSite.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(4).height = 16;
 
-        // 3. DATA TABLE
-        const headRow = worksheet.addRow(['Keterangan', 'Detail']);
-        headRow.height = 25;
-        headRow.eachCell(cell => {
-            cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        worksheet.mergeCells('A5:F5');
+        const cNo = worksheet.getCell('A5');
+        cNo.value = nomorBA;
+        cNo.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FF000000' } };
+        cNo.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(5).height = 18;
+
+        setBoxOutline(3, 1, 5, 6);
+
+        // 3. KOTAK 2: KALIMAT PEMBUKA FORMAT RESMI DENGAN TANGGAL TERBILANG
+        worksheet.mergeCells('A6:F7');
+        const cOpen = worksheet.getCell('A6');
+        cOpen.value = `Pada hari ini ${namaHari}, tanggal ${tanggalTerbilang} Bulan ${namaBulan} Tahun ${tahunTerbilang} (${tglNumerik}), kami yang bertanda tangan dibawah ini menyatakan bahwa Perangkat telah diterima ke Technical Support dengan rincian sebagai berikut:`;
+        cOpen.font = { name: 'Calibri', size: 8.5, color: { argb: 'FF000000' } };
+        cOpen.alignment = { wrapText: true, vertical: 'middle', horizontal: 'left', indent: 1 };
+        worksheet.getRow(6).height = 18;
+        worksheet.getRow(7).height = 18;
+        setBoxOutline(6, 1, 7, 6);
+
+        // 4. KOTAK 3: TABEL RINCIAN BARANG
+        const rowHeaderTbl = worksheet.getRow(8);
+        rowHeaderTbl.values = ['No', 'Nama Barang', 'Merk', 'Serial Number', 'Quantity', 'Satuan'];
+        rowHeaderTbl.height = 20;
+        rowHeaderTbl.eachCell(cell => {
+            cell.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF2F7' } };
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
-            cell.border = {
-                top: { style: 'medium' },
-                left: { style: 'medium' },
-                bottom: { style: 'medium' },
-                right: { style: 'medium' }
-            };
         });
 
-        const rows = [
-            ['ID Inventaris', data.item_id || '-'],
-            ['Nama Barang', data.item_name || '-'],
-            ['Merk / Model', data.item_merk || '-'],
-            ['Serial Number (SN)', data.item_sn || '-'],
-            ['Kategori / Jenis', data.jenis || '-'],
-            ['Kondisi Awal (Penyerah)', data.kondisi_before || '-'],
-            ['Kondisi Akhir (Penerima)', data.kondisi_after || '-'],
-            ['Lokasi Penempatan Baru', data.lokasi_baru || '-']
+        const itemName = data.item_name || data.itemName || 'Laptop';
+        const itemMerk = data.item_merk || data.itemMerk || '-';
+        const itemSn = data.item_sn || data.itemSn || '-';
+
+        const rowDataTbl = worksheet.getRow(9);
+        rowDataTbl.values = [1, itemName, itemMerk, itemSn, 1, 'Unit'];
+        rowDataTbl.height = 20;
+        rowDataTbl.eachCell(cell => {
+            cell.font = { name: 'Calibri', size: 8.5, color: { argb: 'FF000000' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+
+        setRangeBorder(8, 1, 9, 6);
+
+        // 5. KOTAK 4: KELENGKAPAN PERANGKAT (CHECKBOX DINAMIS SESUAI KATEGORI)
+        let checklistItems = [];
+        if (data.checklist) {
+            let raw = data.checklist;
+            if (typeof raw === 'string') {
+                try { raw = JSON.parse(raw); } catch (e) { raw = raw.split(',').map(s => s.trim()).filter(Boolean); }
+            }
+            if (Array.isArray(raw)) {
+                checklistItems = raw.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        return { name: (item.name || item.label || 'Item').trim(), checked: item.checked !== false };
+                    } else if (typeof item === 'string' && item.trim()) {
+                        return { name: item.trim(), checked: true };
+                    }
+                    return null;
+                }).filter(Boolean);
+            }
+        }
+
+        if (checklistItems.length === 0) {
+            const itemLow = itemName.toLowerCase();
+            if (itemLow.includes('laptop')) {
+                checklistItems = [
+                    { name: 'Laptop', checked: true },
+                    { name: 'Dus', checked: false },
+                    { name: 'Charger', checked: true },
+                    { name: 'Tas Laptop', checked: true }
+                ];
+            } else if (itemLow.includes('monitor')) {
+                checklistItems = [
+                    { name: 'Unit Monitor', checked: true },
+                    { name: 'Dus', checked: false },
+                    { name: 'Kabel Power', checked: true },
+                    { name: 'Kabel HDMI / VGA', checked: true }
+                ];
+            } else if (itemLow.includes('pc')) {
+                checklistItems = [
+                    { name: 'Unit PC / CPU', checked: true },
+                    { name: 'Dus', checked: false },
+                    { name: 'Kabel Power', checked: true },
+                    { name: 'Keyboard', checked: true },
+                    { name: 'Mouse', checked: true }
+                ];
+            } else {
+                checklistItems = [
+                    { name: itemName, checked: true },
+                    { name: 'Dus', checked: false },
+                    { name: 'Kabel Power / Adaptor', checked: true }
+                ];
+            }
+        }
+
+        worksheet.mergeCells('A10:F10');
+        const cKlg = worksheet.getCell('A10');
+        cKlg.value = 'Kelengkapan :';
+        cKlg.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+        cKlg.alignment = { vertical: 'middle', indent: 1 };
+        worksheet.getRow(10).height = 18;
+
+        const startCheckRow = 11;
+        const pairCount = Math.max(1, Math.ceil(checklistItems.length / 2));
+        for (let i = 0; i < pairCount; i++) {
+            const curRow = startCheckRow + i;
+            const leftItem = checklistItems[i * 2];
+            const rightItem = checklistItems[i * 2 + 1];
+
+            worksheet.mergeCells(`A${curRow}:C${curRow}`);
+            const leftCell = worksheet.getCell(`A${curRow}`);
+            leftCell.value = leftItem ? `${leftItem.checked ? '[ ✓ ]' : '[   ]'}  ${leftItem.name}` : '';
+            leftCell.font = { name: 'Calibri', size: 8.5, color: { argb: 'FF000000' } };
+            leftCell.alignment = { vertical: 'middle', indent: 2 };
+
+            worksheet.mergeCells(`D${curRow}:F${curRow}`);
+            const rightCell = worksheet.getCell(`D${curRow}`);
+            rightCell.value = rightItem ? `${rightItem.checked ? '[ ✓ ]' : '[   ]'}  ${rightItem.name}` : '';
+            rightCell.font = { name: 'Calibri', size: 8.5, color: { argb: 'FF000000' } };
+            rightCell.alignment = { vertical: 'middle', indent: 2 };
+
+            worksheet.getRow(curRow).height = 16;
+        }
+        const endCheckRow = startCheckRow + pairCount - 1;
+        setBoxOutline(10, 1, endCheckRow, 6);
+
+        // 6. KOTAK 5: HEADER BARIS PERNYATAAN PENGGUNA
+        const headerPernyataanRow = endCheckRow + 1;
+        worksheet.mergeCells(`A${headerPernyataanRow}:F${headerPernyataanRow}`);
+        const cHP = worksheet.getCell(`A${headerPernyataanRow}`);
+        cHP.value = 'Pernyataan Pengguna';
+        cHP.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+        cHP.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF2F7' } };
+        cHP.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(headerPernyataanRow).height = 18;
+        setBoxOutline(headerPernyataanRow, 1, headerPernyataanRow, 6);
+
+        // 7. KOTAK 6: IDENTITAS & 10 BUTIR PERNYATAAN PENGGUNA
+        const namaPenerima = data.pihak_penerima || data.pihakPenerima || 'Rofi Andiyono';
+        const nipVal = data.nip || '97231446ICN';
+        const namaVal = namaPenerima;
+        const emailVal = data.email || (namaVal.toLowerCase().replace(/\s+/g, '.') + '@iconpln.co.id');
+        const hpVal = data.hp || '0895375427610';
+
+        const idStartRow = headerPernyataanRow + 1;
+        worksheet.mergeCells(`A${idStartRow}:F${idStartRow}`);
+        const cSaya = worksheet.getCell(`A${idStartRow}`);
+        cSaya.value = 'Saya Pengguna Perangkat ini';
+        cSaya.font = { name: 'Calibri', size: 8, color: { argb: 'FF000000' } };
+        cSaya.alignment = { vertical: 'middle', indent: 1 };
+        worksheet.getRow(idStartRow).height = 15;
+
+        const identities = [
+            { label: 'NIP', val: nipVal },
+            { label: 'Nama', val: namaVal },
+            { label: 'Email', val: emailVal },
+            { label: 'HP', val: hpVal }
         ];
 
-        rows.forEach(r => {
-            const row = worksheet.addRow(r);
-            row.height = 22;
-            row.getCell(1).font = { name: 'Arial', bold: true, color: { argb: 'FF334155' } };
-            row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-            row.eachCell(cell => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-                cell.alignment = { vertical: 'middle', indent: 1 };
+        let curIdRow = idStartRow + 1;
+        identities.forEach(idItem => {
+            const row = worksheet.getRow(curIdRow);
+            row.getCell(1).value = '';
+            row.getCell(2).value = idItem.label;
+            row.getCell(2).font = { name: 'Calibri', size: 8, bold: true, color: { argb: 'FF000000' } };
+            row.getCell(2).alignment = { vertical: 'middle', indent: 1 };
+
+            worksheet.mergeCells(`C${curIdRow}:F${curIdRow}`);
+            const vCell = worksheet.getCell(`C${curIdRow}`);
+            vCell.value = `: ${idItem.val}`;
+            vCell.font = { name: 'Calibri', size: 8, bold: true, color: { argb: 'FF000000' } };
+            vCell.alignment = { vertical: 'middle' };
+
+            row.height = 14;
+            curIdRow++;
+        });
+
+        worksheet.mergeCells(`A${curIdRow}:F${curIdRow}`);
+        const cNyata = worksheet.getCell(`A${curIdRow}`);
+        cNyata.value = 'Dengan ini menyatakan :';
+        cNyata.font = { name: 'Calibri', size: 8, color: { argb: 'FF000000' } };
+        cNyata.alignment = { vertical: 'middle', indent: 1 };
+        worksheet.getRow(curIdRow).height = 15;
+        curIdRow++;
+
+        // 10 Butir Pernyataan Resmi Sesuai Standar BAST PLN
+        const statements = [
+            { num: '1.', text: 'Bersedia menjaga perangkat fasilitas kerja ini dengan sebaik-baiknya.' },
+            { num: '2.', text: 'Bersedia menggunakan perangkat ini dengan sebagaimana mestinya untuk keperluan pekerjaan di lingkungan Contact Center Ritel' },
+            { num: '3.', text: 'Bersedia untuk tidak memuat/menggunakan data/aplikasi yang tidak sesuai dengan ketentuan penggunaan yang ada di lingkungan Contact Center Ritel' },
+            { num: '4.', text: 'Bersedia tidak memindahtangankan barang/perangkat ke pihak lain tanpa sepersetujuan Top Management' },
+            { num: '5.', text: 'Bersedia tidak membuka casing perangkat secara mandiri.' },
+            { num: '6.', text: 'Bersedia untuk tidak memperbaiki perangkat secara mandiri atau diluar Service Center resmi.' },
+            { num: '7.', text: 'Bersedia mengembalikan perangkat dan kelengkapannya sesuai yang tercantum pada Berita Acara ini' },
+            { num: '8.', text: 'Dalam hal kekurangan, kehilangan dan kerusakan perangkat serta kelengkapannya yang dikembalikan menjadi tanggung jawab Pengguna.' },
+            { num: '9.', text: 'Jika ada perbedaan/perselisihan yang timbul dari atau sehubungan dengan penggunaan perangkat fasilitas kerja atau syarat dan ketentuan dari perjanjian ini, sebagai tindaklanjut perihal itu akan diproses dan dipertimbangkan untuk kemudian diputuskan oleh Top Management' },
+            { num: '10.', text: 'Saya mengakui bahwa saya telah membaca dan memahami syarat dan ketentuan dari Berita Acara ini dan selanjutnya menyetujui untuk mematuhi semua persyaratan dan ketentuan yang diterapkan di lingkungan Contact Center Ritel' }
+        ];
+
+        statements.forEach(st => {
+            const row = worksheet.getRow(curIdRow);
+            const numCell = row.getCell(1);
+            numCell.value = st.num;
+            numCell.font = { name: 'Calibri', size: 7.5, color: { argb: 'FF000000' } };
+            numCell.alignment = { horizontal: 'right', vertical: 'top' };
+
+            worksheet.mergeCells(`B${curIdRow}:F${curIdRow}`);
+            const textCell = worksheet.getCell(`B${curIdRow}`);
+            textCell.value = st.text;
+            textCell.font = { name: 'Calibri', size: 7.5, color: { argb: 'FF000000' } };
+            textCell.alignment = { wrapText: true, vertical: 'top', horizontal: 'left' };
+
+            row.height = st.text.length > 120 ? 25 : (st.text.length > 80 ? 20 : 16);
+            curIdRow++;
+        });
+
+        const endStatementRow = curIdRow - 1;
+        setBoxOutline(idStartRow, 1, endStatementRow, 6);
+
+        // 8. KOTAK 7: CATATAN LAIN
+        const catRow = endStatementRow + 1;
+        worksheet.mergeCells(`A${catRow}:F${catRow}`);
+        const cCat = worksheet.getCell(`A${catRow}`);
+        cCat.value = data.catatan ? `Catatan Lain : ${data.catatan}` : 'Catatan Lain :';
+        cCat.font = { name: 'Calibri', size: 8, bold: true, color: { argb: 'FF000000' } };
+        cCat.alignment = { vertical: 'middle', indent: 1 };
+        worksheet.getRow(catRow).height = 18;
+        setBoxOutline(catRow, 1, catRow, 6);
+
+        // 9. KOTAK 8: KALIMAT PENUTUP
+        const penutupRow = catRow + 1;
+        worksheet.mergeCells(`A${penutupRow}:F${penutupRow}`);
+        const cPenutup = worksheet.getCell(`A${penutupRow}`);
+        cPenutup.value = 'Demikian Berita Acara Serah Terima barang ini dibuat dan ditandatangani untuk dapat dipergunakan sebagaimana mestinya.';
+        cPenutup.font = { name: 'Calibri', size: 8, italic: true, color: { argb: 'FF000000' } };
+        cPenutup.alignment = { vertical: 'middle', indent: 1 };
+        worksheet.getRow(penutupRow).height = 18;
+        setBoxOutline(penutupRow, 1, penutupRow, 6);
+
+        // 10. KOTAK 9: KOTAK TANDA TANGAN 3 KOLOM
+        const signHeaderRow = penutupRow + 1;
+
+        worksheet.mergeCells(`A${signHeaderRow}:B${signHeaderRow}`);
+        const sHead1 = worksheet.getCell(`A${signHeaderRow}`);
+        sHead1.value = 'Yang Menyerahkan';
+        sHead1.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+        sHead1.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.mergeCells(`C${signHeaderRow}:D${signHeaderRow}`);
+        const sHead2 = worksheet.getCell(`C${signHeaderRow}`);
+        sHead2.value = 'Yang Menerima';
+        sHead2.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+        sHead2.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.mergeCells(`E${signHeaderRow}:F${signHeaderRow}`);
+        const sHead3 = worksheet.getCell(`E${signHeaderRow}`);
+        sHead3.value = 'Yang Mengetahui';
+        sHead3.font = { name: 'Calibri', size: 8.5, bold: true, color: { argb: 'FF000000' } };
+        sHead3.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.getRow(signHeaderRow).height = 18;
+
+        // Area Kosong / TTD Image
+        const signSpaceStart = signHeaderRow + 1;
+        worksheet.getRow(signSpaceStart).height = 16;
+        worksheet.getRow(signSpaceStart + 1).height = 16;
+        worksheet.getRow(signSpaceStart + 2).height = 16;
+
+        // Embed Tanda Tangan Digital pada Kolom "Yang Menyerahkan"
+        const namaPenyerahVal = data.pihak_penyerah || data.pihakPenyerah || '-';
+        let sigImageId = null;
+
+        if (data.signature && typeof data.signature === 'string' && data.signature.length > 50) {
+            try {
+                sigImageId = workbook.addImage({
+                    base64: data.signature,
+                    extension: 'png'
+                });
+            } catch (e) {}
+        }
+
+        if (!sigImageId) {
+            try {
+                const ttdFile = namaPenyerahVal.toLowerCase().includes('rofi') ? 'img/ttd_rofi.png' : 'img/ttd_gustian.png';
+                const sigRes = await fetch(ttdFile);
+                if (sigRes.ok) {
+                    const sigBuf = await sigRes.arrayBuffer();
+                    sigImageId = workbook.addImage({ buffer: sigBuf, extension: 'png' });
+                }
+            } catch (e) {}
+        }
+
+        if (sigImageId) {
+            worksheet.addImage(sigImageId, {
+                tl: { col: 0.35, row: signSpaceStart - 0.9 },
+                ext: { width: 85, height: 42 }
             });
-        });
+        }
 
-        worksheet.addRow([]);
+        // Baris Nama Pejabat / Pihak
+        const signNameRow = signSpaceStart + 3;
+        worksheet.mergeCells(`A${signNameRow}:B${signNameRow}`);
+        const sName1 = worksheet.getCell(`A${signNameRow}`);
+        sName1.value = namaPenyerahVal;
+        sName1.font = { name: 'Calibri', size: 8.5, bold: true, underline: true, color: { argb: 'FF000000' } };
+        sName1.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        // 4. SIGNATURE SECTION
-        worksheet.addRow([]);
-        const sigHeader = worksheet.addRow(['Pihak Penyerah,', 'Pihak Penerima,']);
-        sigHeader.height = 20;
-        sigHeader.eachCell(cell => {
-            cell.font = { name: 'Arial', bold: true, size: 11 };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        });
+        worksheet.mergeCells(`C${signNameRow}:D${signNameRow}`);
+        const sName2 = worksheet.getCell(`C${signNameRow}`);
+        sName2.value = namaVal;
+        sName2.font = { name: 'Calibri', size: 8.5, bold: true, underline: true, color: { argb: 'FF000000' } };
+        sName2.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        // Space for signature
-        worksheet.addRow([]);
-        worksheet.addRow([]);
-        worksheet.addRow([]);
+        worksheet.mergeCells(`E${signNameRow}:F${signNameRow}`);
+        const sName3 = worksheet.getCell(`E${signNameRow}`);
+        sName3.value = 'Erya Sari Dewi';
+        sName3.font = { name: 'Calibri', size: 8.5, bold: true, underline: true, color: { argb: 'FF000000' } };
+        sName3.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        const nameRow = worksheet.addRow([
-            data.pihak_penyerah || '( ............................ )',
-            data.pihak_penerima || '( ............................ )'
-        ]);
-        nameRow.height = 20;
-        nameRow.eachCell(cell => {
-            cell.font = { name: 'Arial', bold: true, size: 11, underline: true };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        });
+        worksheet.getRow(signNameRow).height = 16;
 
-        worksheet.addRow([]);
-        const knowingRow = worksheet.addRow(['Mengetahui,']);
-        worksheet.mergeCells(`A${knowingRow.number}:B${knowingRow.number}`);
-        knowingRow.getCell(1).font = { name: 'Arial', size: 11 };
-        knowingRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        // Baris Jabatan
+        const signJabatanRow = signNameRow + 1;
+        worksheet.mergeCells(`A${signJabatanRow}:B${signJabatanRow}`);
+        const sJab1 = worksheet.getCell(`A${signJabatanRow}`);
+        sJab1.value = 'Technical Support';
+        sJab1.font = { name: 'Calibri', size: 7.5, color: { argb: 'FF000000' } };
+        sJab1.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        worksheet.addRow([]);
-        worksheet.addRow([]);
-        const managementRow = worksheet.addRow(['ICONNET']);
-        worksheet.mergeCells(`A${managementRow.number}:B${managementRow.number}`);
-        managementRow.getCell(1).font = { name: 'Arial', bold: true, size: 11, color: { argb: 'FF4F46E5' } };
-        managementRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.mergeCells(`C${signJabatanRow}:D${signJabatanRow}`);
+        const sJab2 = worksheet.getCell(`C${signJabatanRow}`);
+        sJab2.value = 'Team Leader';
+        sJab2.font = { name: 'Calibri', size: 7.5, color: { argb: 'FF000000' } };
+        sJab2.alignment = { horizontal: 'center', vertical: 'middle' };
 
-        // 5. NOTES SECTION
-        if (data.catatan) {
-            worksheet.addRow([]);
-            worksheet.addRow([]);
-            const noteHeader = worksheet.addRow(['Catatan:']);
-            noteHeader.getCell(1).font = { name: 'Arial', bold: true, size: 10 };
+        worksheet.mergeCells(`E${signJabatanRow}:F${signJabatanRow}`);
+        const sJab3 = worksheet.getCell(`E${signJabatanRow}`);
+        sJab3.value = 'Head of Site';
+        sJab3.font = { name: 'Calibri', size: 7.5, color: { argb: 'FF000000' } };
+        sJab3.alignment = { horizontal: 'center', vertical: 'middle' };
 
-            const noteContent = worksheet.addRow([data.catatan]);
-            worksheet.mergeCells(`A${noteContent.number}:B${noteContent.number}`);
-            noteContent.getCell(1).font = { name: 'Arial', italic: true, size: 10, color: { argb: 'FF64748B' } };
-            noteContent.getCell(1).alignment = { wrapText: true };
+        worksheet.getRow(signJabatanRow).height = 16;
+
+        // Garis pemisah 3 Kolom Tanda Tangan
+        setBoxOutline(signHeaderRow, 1, signJabatanRow, 2);
+        setBoxOutline(signHeaderRow, 3, signJabatanRow, 4);
+        setBoxOutline(signHeaderRow, 5, signJabatanRow, 6);
+        setBoxOutline(signHeaderRow, 1, signJabatanRow, 6);
+
+        // 11. PITA DEKORASI FOOTER
+        try {
+            const footRes = await fetch('img/bast_footer_decor.png');
+            if (footRes.ok) {
+                const footBuf = await footRes.arrayBuffer();
+                const footId = workbook.addImage({ buffer: footBuf, extension: 'png' });
+                worksheet.addImage(footId, {
+                    tl: { col: 2.2, row: signJabatanRow + 0.6 },
+                    ext: { width: 280, height: 22 }
+                });
+            }
+        } catch (e) {}
+
+        // Page Setup Standar Cetak A4 Portrait Presisi
+        worksheet.pageSetup = {
+            paperSize: 9, // A4
+            orientation: 'portrait',
+            fitToPage: true,
+            fitToWidth: 1,
+            fitToHeight: 1,
+            margins: {
+                left: 0.35,
+                right: 0.35,
+                top: 0.35,
+                bottom: 0.35,
+                header: 0.15,
+                footer: 0.15
+            }
+        };
+
+        // 12. SHEET 2: DOKUMENTASI FOTO EVIDENT (Jika Tersedia)
+        let photosList = [];
+        if (data.photos) {
+            if (Array.isArray(data.photos)) {
+                photosList = data.photos;
+            } else if (typeof data.photos === 'string') {
+                try {
+                    const parsed = JSON.parse(data.photos);
+                    if (Array.isArray(parsed)) photosList = parsed;
+                    else if (data.photos.trim().length > 10) photosList = [data.photos];
+                } catch (e) {
+                    if (data.photos.startsWith('data:image')) photosList = [data.photos];
+                }
+            }
+        }
+
+        if (photosList.length > 0) {
+            const photoSheet = workbook.addWorksheet('Dokumentasi Evident', {
+                views: [{ showGridLines: true }]
+            });
+            photoSheet.columns = [
+                { width: 8 }, { width: 38 }, { width: 38 }, { width: 8 }
+            ];
+
+            photoSheet.mergeCells('A2:D2');
+            const phTitle = photoSheet.getCell('A2');
+            phTitle.value = `DOKUMENTASI FOTO EVIDENT - SERAH TERIMA ${titleItem}`;
+            phTitle.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF000000' } };
+            phTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+            photoSheet.getRow(2).height = 24;
+
+            photoSheet.mergeCells('A3:D3');
+            const phSub = photoSheet.getCell('A3');
+            phSub.value = `${nomorBA} | ${itemName} - ${itemSn}`;
+            phSub.font = { name: 'Calibri', size: 9.5, italic: true, color: { argb: 'FF475569' } };
+            phSub.alignment = { horizontal: 'center', vertical: 'middle' };
+            photoSheet.getRow(3).height = 18;
+
+            let curPhotoRow = 5;
+            for (let i = 0; i < photosList.length; i += 2) {
+                const photo1 = photosList[i];
+                const photo2 = photosList[i + 1];
+
+                photoSheet.getRow(curPhotoRow).height = 140;
+
+                if (photo1 && photo1.startsWith('data:image')) {
+                    try {
+                        const imgExt = photo1.includes('png') ? 'png' : 'jpeg';
+                        const imgId = workbook.addImage({ base64: photo1, extension: imgExt });
+                        photoSheet.addImage(imgId, {
+                            tl: { col: 1.1, row: curPhotoRow - 0.9 },
+                            ext: { width: 220, height: 130 }
+                        });
+                    } catch (e) {}
+                }
+
+                if (photo2 && photo2.startsWith('data:image')) {
+                    try {
+                        const imgExt = photo2.includes('png') ? 'png' : 'jpeg';
+                        const imgId = workbook.addImage({ base64: photo2, extension: imgExt });
+                        photoSheet.addImage(imgId, {
+                            tl: { col: 2.1, row: curPhotoRow - 0.9 },
+                            ext: { width: 220, height: 130 }
+                        });
+                    } catch (e) {}
+                }
+
+                // Caption Baris Foto
+                const capRow = curPhotoRow + 1;
+                photoSheet.getCell(`B${capRow}`).value = `Dokumentasi Fisik ${i + 1}`;
+                photoSheet.getCell(`B${capRow}`).font = { name: 'Calibri', size: 8.5, bold: true };
+                photoSheet.getCell(`B${capRow}`).alignment = { horizontal: 'center' };
+
+                if (photo2) {
+                    photoSheet.getCell(`C${capRow}`).value = `Dokumentasi Fisik ${i + 2}`;
+                    photoSheet.getCell(`C${capRow}`).font = { name: 'Calibri', size: 8.5, bold: true };
+                    photoSheet.getCell(`C${capRow}`).alignment = { horizontal: 'center' };
+                }
+
+                photoSheet.getRow(capRow).height = 18;
+                curPhotoRow += 3;
+            }
+
+            photoSheet.pageSetup = {
+                paperSize: 9,
+                orientation: 'portrait',
+                fitToPage: true,
+                fitToWidth: 1,
+                fitToHeight: 1
+            };
         }
 
         // Export and Download
@@ -6942,13 +7386,17 @@ async function generateBA_excel(id) {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `BA_SERAH_TERIMA_${data.item_id || 'ITEM'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const cleanName = namaVal.replace(/\s+/g, '_');
+        link.download = `BAST_${titleItem.replace(/[\/\s]+/g, '_')}_${cleanName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
 
-        showToast('BA Excel profesional berhasil diunduh!');
+        showToast('Berita Acara Excel resmi berhasil diunduh!');
     } catch (error) {
         console.error('Error generating Excel:', error);
-        showToast('Gagal membuat file Excel!', true);
+        showToast('Gagal membuat file Excel: ' + (error.message || error), true);
     }
 }
 

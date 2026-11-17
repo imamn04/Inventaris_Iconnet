@@ -12,13 +12,7 @@ async function runTests() {
   const baseUrl = `http://127.0.0.1:${TEST_PORT}`;
 
   try {
-    // 1. Stats
-    const statsRes = await fetch(`${baseUrl}/api/stats`);
-    if (statsRes.status !== 200) throw new Error('Stats status is not 200');
-    const stats = await statsRes.json();
-    console.log('[PASS] GET /api/stats -> total items:', stats.total);
-
-    // 2. Login
+    // 1. Login
     const loginRes = await fetch(`${baseUrl}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -27,22 +21,34 @@ async function runTests() {
     if (loginRes.status !== 200) throw new Error('Login status is not 200');
     const loginData = await loginRes.json();
     if (!loginData.success) throw new Error('Login failed: ' + loginData.message);
+    const token = loginData.token;
     console.log('[PASS] POST /api/login -> authenticated user:', loginData.user.username);
 
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+
+    // 2. Stats
+    const statsRes = await fetch(`${baseUrl}/api/stats`, { headers: authHeaders });
+    if (statsRes.status !== 200) throw new Error('Stats status is not 200');
+    const stats = await statsRes.json();
+    console.log('[PASS] GET /api/stats -> total items:', stats.total);
+
     // 3. Inventory
-    const invRes = await fetch(`${baseUrl}/api/inventory`);
+    const invRes = await fetch(`${baseUrl}/api/inventory`, { headers: authHeaders });
     if (invRes.status !== 200) throw new Error('Inventory status is not 200');
     const items = await invRes.json();
     console.log('[PASS] GET /api/inventory -> items count:', items.length);
 
     // 4. Cubicles
-    const cubicleRes = await fetch(`${baseUrl}/api/cubicle-positions`);
+    const cubicleRes = await fetch(`${baseUrl}/api/cubicle-positions`, { headers: authHeaders });
     if (cubicleRes.status !== 200) throw new Error('Cubicles status is not 200');
     const cubicles = await cubicleRes.json();
     console.log('[PASS] GET /api/cubicle-positions -> cubicles count:', cubicles.length);
 
     // 5. Handover
-    const handoverRes = await fetch(`${baseUrl}/api/handover`);
+    const handoverRes = await fetch(`${baseUrl}/api/handover`, { headers: authHeaders });
     if (handoverRes.status !== 200) throw new Error('Handover status is not 200');
     const handovers = await handoverRes.json();
     console.log('[PASS] GET /api/handover -> records count:', handovers.length);
