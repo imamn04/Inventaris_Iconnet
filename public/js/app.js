@@ -10791,15 +10791,22 @@ function setHandoverFilterTab(tab) {
 }
 window.setHandoverFilterTab = setHandoverFilterTab;
 
+// Ensure navigateToPage is universally accessible
+if (typeof navigateTo === 'function') {
+    window.navigateToPage = navigateTo;
+}
+
 async function triggerQuickReturn(handoverId) {
-    const h = (handoverData || []).find(item => item.id === handoverId);
+    const h = (handoverData || []).find(item => String(item.id) === String(handoverId) || item.id == handoverId);
     if (!h) {
         showToast('Data transaksi serah terima tidak ditemukan!', 'error');
         return;
     }
 
     // 1. Switch to BAST Input Page
-    if (typeof navigateToPage === 'function') {
+    if (typeof navigateTo === 'function') {
+        navigateTo('handover-input');
+    } else if (typeof navigateToPage === 'function') {
         navigateToPage('handover-input');
     }
 
@@ -10829,7 +10836,16 @@ async function triggerQuickReturn(handoverId) {
     // 5. Populate & Select Category
     const katSelect = document.getElementById('handoverKategori');
     if (katSelect) {
-        katSelect.value = h.item_name || '';
+        let matchedCat = '';
+        const targetCat = (h.item_name || '').toLowerCase().trim();
+        for (let opt of katSelect.options) {
+            const optVal = (opt.value || '').toLowerCase().trim();
+            if (optVal && (optVal === targetCat || targetCat.includes(optVal) || optVal.includes(targetCat))) {
+                matchedCat = opt.value;
+                break;
+            }
+        }
+        katSelect.value = matchedCat || h.item_name || '';
     }
     await loadItemsByCategory();
 
@@ -10837,6 +10853,15 @@ async function triggerQuickReturn(handoverId) {
     const itemSelect = document.getElementById('handoverItem');
     if (itemSelect) {
         itemSelect.value = h.item_id || '';
+        // If not selected by exact ID, try to match by option text or data attributes
+        if (!itemSelect.value && h.item_id) {
+            for (let opt of itemSelect.options) {
+                if (opt.value === h.item_id || (h.item_sn && opt.getAttribute('data-sn') === h.item_sn)) {
+                    itemSelect.value = opt.value;
+                    break;
+                }
+            }
+        }
     }
     if (typeof loadHandoverItemDetails === 'function') {
         loadHandoverItemDetails();
@@ -10870,7 +10895,7 @@ async function triggerQuickReturn(handoverId) {
     // 11. Focus on No BA input for seamless workflow
     setTimeout(() => {
         if (noBaInput) noBaInput.focus();
-    }, 200);
+    }, 250);
 
     showToast(`Form Pengembalian untuk ${h.pihak_penerima || 'Karyawan'} siap! Masukkan No. BA dari Sheet Pusat.`, 'info');
 }
