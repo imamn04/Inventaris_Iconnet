@@ -151,6 +151,89 @@ async function createInventoryItem(data) {
   return mapped;
 }
 
+async function createBatchInventory(commonData, items) {
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new Error('Daftar barang batch tidak boleh kosong');
+  }
+
+  const existingItems = await prisma.inventory.findMany({
+    select: { no: true, id: true }
+  });
+  const usedIds = new Set(existingItems.map(i => i.id));
+  const maxNo = existingItems.reduce((max, i) => Math.max(max, i.no || 0), 0);
+  let nextNo = maxNo + 1;
+
+  const tanggalMasuk = parseIndonesianDate(commonData.tanggalMasuk || commonData.date);
+  const dateVal = parseIndonesianDate(commonData.date);
+  const cubicleId = (commonData.cubicle_id || commonData.cubicleId)
+    ? (commonData.cubicle_id || commonData.cubicleId).trim().toUpperCase()
+    : extractCubicleId(commonData.lokasi);
+
+  const barcodeDir = path.join(process.cwd(), 'barcode');
+  if (!fs.existsSync(barcodeDir)) {
+    fs.mkdirSync(barcodeDir, { recursive: true });
+  }
+
+  const createdList = [];
+
+  for (const it of items) {
+    let candidateId = `INV-${String(nextNo).padStart(3, '0')}`;
+    while (usedIds.has(candidateId)) {
+      nextNo++;
+      candidateId = `INV-${String(nextNo).padStart(3, '0')}`;
+    }
+    const id = candidateId;
+    usedIds.add(id);
+
+    let qrCode = it.qrCode || '';
+    if (qrCode && qrCode.startsWith('data:image/png;base64,')) {
+      const base64Data = qrCode.replace(/^data:image\/png;base64,/, '');
+      const barcodePath = path.join(barcodeDir, `${id}.png`);
+      fs.writeFileSync(barcodePath, base64Data, 'base64');
+      qrCode = `/barcode/${id}.png`;
+    }
+
+    const created = await prisma.inventory.create({
+      data: {
+        id: id,
+        no: nextNo,
+        name: commonData.name,
+        merk: commonData.merk || '',
+        sn: it.sn || '',
+        snConverter: it.snConverter || '',
+        lokasi: commonData.lokasi || '',
+        kondisiBefore: commonData.kondisiBefore || 'Baik',
+        checklist: commonData.checklist || 'Tidak',
+        kondisiAfter: commonData.kondisiAfter || '',
+        catatan: commonData.catatan || '',
+        tanggalMasuk: tanggalMasuk,
+        date: dateVal,
+        qrCode: qrCode,
+        cubicleId: cubicleId || ''
+      }
+    });
+
+    const mapped = mapInventory(created);
+    await logHistory('CREATE', mapped, `Menambahkan item batch: ${mapped.name} (${mapped.id}) SN: ${mapped.sn}`);
+    createdList.push(mapped);
+    nextNo++;
+  }
+
+  if (commonData.name && commonData.name.trim()) {
+    try {
+      const catName = commonData.name.trim();
+      const existing = await prisma.category.findFirst({
+        where: { name: { equals: catName, mode: 'insensitive' } }
+      });
+      if (!existing) {
+        await prisma.category.create({ data: { name: catName } });
+      }
+    } catch (_) {}
+  }
+
+  return createdList;
+}
+
 async function updateInventoryItem(id, data) {
   const current = await prisma.inventory.findUnique({
     where: { id }
@@ -269,7 +352,7 @@ async function deleteInventoryItem(id) {
   return true;
 }
 
-async function checkItemScan(searchValue, newKondisi = null, action = 'check') {
+async function checkItemScan(searchValue, newKondisi = null, action = 'check', relokasi = null) {
   if (!searchValue) {
     return { success: false, status: 'not_found' };
   }
@@ -340,12 +423,21 @@ async function checkItemScan(searchValue, newKondisi = null, action = 'check') {
     updateData.kondisiAfter = String(newKondisi).trim();
   }
 
+  // Jika ada relokasi fisik saat audit defect/rusak
+  if (relokasi && String(relokasi).trim() && String(relokasi).trim() !== '-') {
+    const trimmedLoc = String(relokasi).trim();
+    updateData.lokasi = trimmedLoc;
+    const extracted = extractCubicleId(trimmedLoc);
+    updateData.cubicleId = extracted || '';
+  }
+
   const updated = await prisma.inventory.update({
     where: { id: item.id },
     data: updateData
   });
 
-  await logHistory('UPDATE', { id: item.id, name: item.name }, `Melakukan check inventaris: ${item.id} (Status: ${targetChecklist}, Kondisi: ${newKondisi || item.kondisiAfter || 'Tanpa Perubahan'})`);
+  const relocateNote = relokasi ? `, Relokasi: ${relokasi}` : '';
+  await logHistory('UPDATE', { id: item.id, name: item.name }, `Melakukan check inventaris: ${item.id} (Status: ${targetChecklist}, Kondisi: ${newKondisi || item.kondisiAfter || 'Tanpa Perubahan'}${relocateNote})`);
   return {
     success: true,
     status: alreadyChecked ? 'already_checked' : 'first_check',
@@ -527,6 +619,7 @@ module.exports = {
   mapInventory,
   getAllInventory,
   createInventoryItem,
+  createBatchInventory,
   updateInventoryItem,
   deleteInventoryItem,
   checkItemScan,

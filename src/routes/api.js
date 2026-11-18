@@ -14,7 +14,8 @@ const {
   categorySchema,
   cubiclePositionsBulkSchema,
   addLocationSchema,
-  handoverSchema
+  handoverSchema,
+  batchInventorySchema
 } = require('../validators');
 
 const authController = require('../controllers/authController');
@@ -50,6 +51,7 @@ router.delete('/categories/:id', categoryController.remove);
 // Inventory
 router.get('/inventory', inventoryController.getAll);
 router.post('/inventory', validate(inventoryItemSchema), inventoryController.create);
+router.post('/inventory/batch', validate(batchInventorySchema), inventoryController.createBatch);
 router.put('/inventory/:id', validate(inventoryUpdateSchema), inventoryController.update);
 router.delete('/inventory/:id', inventoryController.remove);
 router.post('/inventory/check', validate(checkInventorySchema), inventoryController.checkItem);

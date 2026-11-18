@@ -18,6 +18,16 @@ async function create(req, res, next) {
   }
 }
 
+async function createBatch(req, res, next) {
+  try {
+    const { commonData, items } = req.body;
+    const createdItems = await inventoryService.createBatchInventory(commonData, items);
+    res.status(201).json({ success: true, count: createdItems.length, items: createdItems });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function update(req, res, next) {
   try {
     const { id } = req.params;
@@ -46,8 +56,8 @@ async function remove(req, res, next) {
 
 async function checkItem(req, res, next) {
   try {
-    const { searchValue, kondisi, action } = req.body;
-    const result = await inventoryService.checkItemScan(searchValue, kondisi, action);
+    const { searchValue, kondisi, action, relokasi } = req.body;
+    const result = await inventoryService.checkItemScan(searchValue, kondisi, action, relokasi);
     res.json(result);
   } catch (err) {
     next(err);
@@ -112,6 +122,7 @@ async function assignCubicle(req, res, next) {
 module.exports = {
   getAll,
   create,
+  createBatch,
   update,
   remove,
   checkItem,

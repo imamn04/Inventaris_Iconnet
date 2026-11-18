@@ -48,7 +48,25 @@ const bulkDeleteSchema = z.object({
 const checkInventorySchema = z.object({
   searchValue: z.string().min(1, 'Kode pencarian / SN wajib diisi').trim(),
   kondisi: z.string().optional().nullable(),
-  action: z.enum(['check', 'uncheck', 'toggle']).optional()
+  action: z.enum(['check', 'uncheck', 'toggle']).optional(),
+  relokasi: z.string().optional().nullable()
+});
+
+const batchInventorySchema = z.object({
+  commonData: z.object({
+    name: z.string().min(1, 'Nama barang wajib diisi').trim(),
+    merk: z.string().optional().nullable(),
+    lokasi: z.string().optional().nullable(),
+    tanggalMasuk: z.string().optional().nullable(),
+    kondisiBefore: z.string().optional().nullable(),
+    checklist: z.string().optional().nullable(),
+    catatan: z.string().optional().nullable()
+  }),
+  items: z.array(z.object({
+    sn: z.string().optional().nullable(),
+    snConverter: z.string().optional().nullable(),
+    qrCode: z.string().optional().nullable()
+  })).min(1, 'Minimal satu unit barang wajib diisi')
 });
 
 const toggleChecklistSchema = z.object({
@@ -117,6 +135,7 @@ module.exports = {
   cubiclePositionSchema,
   cubiclePositionsBulkSchema,
   addLocationSchema,
-  handoverSchema
+  handoverSchema,
+  batchInventorySchema
 };
 

@@ -53,6 +53,44 @@ async function runTests() {
     const handovers = await handoverRes.json();
     console.log('[PASS] GET /api/handover -> records count:', handovers.length);
 
+    // 6. Non-Inventory Logs
+    const nonInvLogsRes = await fetch(`${baseUrl}/api/non-inventory/logs`, { headers: authHeaders });
+    if (nonInvLogsRes.status !== 200) throw new Error('Non-Inventory logs status is not 200');
+    const nonInvLogs = await nonInvLogsRes.json();
+    console.log('[PASS] GET /api/non-inventory/logs -> mutation logs count:', Array.isArray(nonInvLogs) ? nonInvLogs.length : 0);
+
+    // 7. Batch Inventory Intake Test
+    const batchRes = await fetch(`${baseUrl}/api/inventory/batch`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        commonData: {
+          name: 'Kursi Kerja Ergonomis',
+          merk: 'Informa',
+          lokasi: 'Gudang Standby',
+          kondisiBefore: 'Baik',
+          kondisiAfter: 'Baik',
+          checklist: 'Tidak',
+          catatan: 'Unit batch test otomatis'
+        },
+        items: [
+          { sn: 'TEST-KRS-001' },
+          { sn: 'TEST-KRS-002' }
+        ]
+      })
+    });
+    if (batchRes.status !== 201) throw new Error('Batch inventory status is not 201: ' + await batchRes.text());
+    const batchData = await batchRes.json();
+    console.log('[PASS] POST /api/inventory/batch -> successfully created items count:', batchData.count);
+
+    // Clean up test batch items
+    if (batchData.items && batchData.items.length > 0) {
+      for (const item of batchData.items) {
+        await prisma.inventory.delete({ where: { id: item.id } }).catch(() => {});
+      }
+      console.log('[PASS] Cleanup test batch items successfully');
+    }
+
     console.log('\n[SUCCESS] ALL INTEGRATION TESTS PASSED 100%!');
   } catch (err) {
     console.error('\n[FAIL] Integration test failed:', err.message);
