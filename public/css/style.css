@@ -9868,4 +9868,119 @@ body.dark-theme .audit-clickable-row:hover {
     box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
 }
 
+/* ========================================================
+   ASSET MOVEMENT TIMELINE & AUDIT LOG (OPSI C)
+   ======================================================== */
+.asset-timeline-container {
+    position: relative;
+    padding-left: 32px;
+}
+
+.asset-timeline-container::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    background: var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-item-dot {
+    position: absolute;
+    left: -32px;
+    top: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    box-shadow: 0 0 0 4px var(--bg-card, #1e293b);
+    z-index: 2;
+}
+
+.timeline-item-dot.dot-register {
+    background: #3b82f6;
+    color: #ffffff;
+}
+
+.timeline-item-dot.dot-penerimaan {
+    background: #10b981;
+    color: #ffffff;
+}
+
+.timeline-item-dot.dot-pengembalian {
+    background: #f59e0b;
+    color: #ffffff;
+}
+
+.timeline-card {
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+
+.timeline-card:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.timeline-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.timeline-card-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.timeline-card-date {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px 14px;
+    font-size: 12px;
+}
+
+.timeline-meta-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.timeline-meta-val {
+    color: var(--text-primary, #e2e8f0);
+    font-weight: 500;
+}
+
+
 

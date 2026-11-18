@@ -94,7 +94,7 @@
     <link rel="apple-touch-icon" href="img/logo1.png">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="css/style.css?v=4.3.1">
+    <link rel="stylesheet" href="css/style.css?v=4.5.0">
 </head>
 
 <body>
@@ -1516,7 +1516,7 @@
                             <i class="fas fa-list-ul"></i> Semua Transaksi (<span id="countTabAll">0</span>)
                         </button>
                         <button type="button" class="zone-pill-btn" id="tabBtnHandoverPenerimaan" onclick="setHandoverFilterTab('Penerimaan')" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px;">
-                            <i class="fas fa-arrow-down" style="color: #10b981;"></i> Penerimaan / Aset Dipakai (<span id="countTabPenerimaan">0</span>)
+                            <i class="fas fa-user-check" style="color: #10b981;"></i> Aset Sedang Dipakai (<span id="countTabPenerimaan">0</span>)
                         </button>
                         <button type="button" class="zone-pill-btn" id="tabBtnHandoverPengembalian" onclick="setHandoverFilterTab('Pengembalian')" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px;">
                             <i class="fas fa-undo" style="color: #f59e0b;"></i> Riwayat Pengembalian (<span id="countTabPengembalian">0</span>)
@@ -1531,8 +1531,8 @@
                             </div>
                             <select id="handoverJenisFilter" class="filter-select">
                                 <option value="all">Semua Jenis Transaksi</option>
-                                <option value="Penerimaan">Penerimaan (Baru)</option>
-                                <option value="Pengembalian">Pengembalian (Return)</option>
+                                <option value="Penerimaan">Aset Sedang Dipakai (Aktif)</option>
+                                <option value="Pengembalian">Riwayat Pengembalian (Return)</option>
                             </select>
                             <select id="handoverViewLimit" class="filter-select view-limit"
                                 onchange="updateHandoverTable()">
@@ -2449,6 +2449,9 @@
                         <div class="passport-action-bar">
                             <button type="button" class="passport-action-btn primary" onclick="printBarcode()" title="Cetak label barcode / QR untuk fisik barang">
                                 <i class="fas fa-print"></i> <span>Cetak Label</span>
+                            </button>
+                            <button type="button" class="passport-action-btn secondary" onclick="openAssetHistoryFromViewModal()" title="Lihat riwayat pergerakan & log BAST unit ini" style="background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);">
+                                <i class="fas fa-history"></i> <span>Log Riwayat</span>
                             </button>
                             <button type="button" class="passport-action-btn secondary" onclick="copySnToClipboard()" title="Salin nomor seri ke clipboard">
                                 <i class="fas fa-copy"></i> <span>Salin SN</span>
@@ -3435,6 +3438,56 @@
                                                 <!-- Hidden Label Print Container -->
                                                 <div id="labelPrintContainer"></div>
 
+    <!-- Asset Movement History / Timeline Modal (Opsi C) -->
+    <div class="modal-overlay" id="assetHistoryTimelineModal">
+        <div class="modal compact-edit-modal" style="max-width: 760px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header compact-modal-header" style="flex-shrink: 0;">
+                <div class="compact-modal-title">
+                    <div class="title-badge-icon" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3);">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Log Riwayat Pergerakan Unit</h3>
+                            <span class="badge" id="timelineModalItemBadge" style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.25);">#INV-000</span>
+                        </div>
+                        <span style="font-size: 12px; color: var(--text-secondary);" id="timelineModalItemSubtitle">Tracking mutasi, penerimaan, dan pengembalian unit</span>
+                    </div>
+                </div>
+                <button type="button" class="modal-close" onclick="closeModal('assetHistoryTimelineModal')">&times;</button>
+            </div>
+
+            <!-- Header Info Card: Unit Summary & Current Operational Status -->
+            <div class="timeline-hero-summary" style="padding: 14px 20px; background: var(--bg-card, rgba(255,255,255,0.03)); border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex-shrink: 0;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span id="timelineItemName" style="font-size: 15px; font-weight: 700; color: var(--text-primary, #fff);">-</span>
+                        <span id="timelineItemMerk" style="font-size: 12px; color: var(--text-secondary); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;">-</span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <span><i class="fas fa-barcode"></i> SN: <strong id="timelineItemSn" class="font-mono">-</strong></span>
+                        <span><i class="fas fa-map-marker-alt"></i> Lokasi Master: <strong id="timelineItemLoc">-</strong></span>
+                    </div>
+                </div>
+                <div id="timelineCurrentStatusPill" style="display: flex; align-items: center;">
+                    <!-- Injected dynamically: Standby di Gudang or Sedang Digunakan -->
+                </div>
+            </div>
+
+            <!-- Timeline Body (Scrollable) -->
+            <div class="modal-body" style="padding: 20px; overflow-y: auto; flex: 1;">
+                <div class="asset-timeline-container" id="timelineListContainer">
+                    <!-- Injected dynamically -->
+                </div>
+            </div>
+
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+                <span style="font-size: 12px; color: var(--text-secondary);"><i class="fas fa-shield-alt"></i> Jejak audit pergerakan aset tercatat rapi</span>
+                <button type="button" class="btn-bastb-close" onclick="closeModal('assetHistoryTimelineModal')" style="padding: 8px 20px;">Tutup</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Mobile App Bottom Navigation Bar (Android & iOS Native Experience) -->
     <nav class="mobile-bottom-bar" id="mobileBottomBar" aria-label="Navigasi Mobile">
         <button type="button" class="mobile-nav-item active" data-page="dashboard" title="Dashboard">
@@ -3462,7 +3515,7 @@
     </nav>
 
     <!-- Custom JavaScript -->
-    <script src="js/app.js?v=4.4.2"></script>
+    <script src="js/app.js?v=4.5.0"></script>
 </body>
 
 </html>

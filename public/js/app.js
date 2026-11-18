@@ -260,6 +260,9 @@ function attachActionButtonListeners(containerId = 'inventoryTableBody') {
                 printProfessionalLabel(id);
             } else if (btn.classList.contains('delete')) {
                 deleteItem(id);
+            } else if (btn.classList.contains('history')) {
+                const item = (inventoryData || []).find(i => String(i.id) === String(id));
+                openAssetHistoryTimeline(id, item ? item.sn : '');
             }
         } catch (err) {
             console.error('[ACTION] Error handling click:', err);
@@ -2017,6 +2020,7 @@ function updateInventoryTable() {
                 </td>
                 <td>
                     <div class="table-actions-cluster action-buttons">
+                        <button class="action-btn history btn-action-icon" title="Log Riwayat Pergerakan Unit" style="background: rgba(99, 102, 241, 0.12); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3);"><i class="fas fa-history"></i></button>
                         <button class="action-btn view btn-action-icon btn-view" title="Lihat"><i class="fas fa-eye"></i></button>
                         <button class="action-btn edit btn-action-icon btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
                         <button class="action-btn print btn-action-icon btn-print" title="Cetak Label"><i class="fas fa-print"></i></button>
@@ -6258,6 +6262,41 @@ function sortHandoverTable(key) {
     renderHandoverTable();
 }
 
+// Helper to get lifecycle status of a handover record (Active, Returned, or Return Record)
+function getHandoverItemLifecycle(h) {
+    if (!h) return { isReturn: false, isAlreadyReturned: false, returnRecord: null, isCurrentActiveHolder: false };
+    const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+    if (isReturn) {
+        return { isReturn: true, isAlreadyReturned: false, returnRecord: null, isCurrentActiveHolder: false };
+    }
+
+    const hTime = new Date(h.tanggal_serah_terima || h.timestamp || 0).getTime();
+    const hId = Number(h.id) || 0;
+
+    // Look for a subsequent return record for this asset
+    const returnRecord = (handoverData || []).find(other => {
+        if (String(other.id) === String(h.id)) return false;
+        const otherIsReturn = (other.jenis || '').toLowerCase().includes('kembali');
+        if (!otherIsReturn) return false;
+
+        const isSameItem = (other.item_id && h.item_id && String(other.item_id).trim().toLowerCase() === String(h.item_id).trim().toLowerCase()) ||
+                           (other.item_sn && h.item_sn && String(other.item_sn).trim() !== '' && String(other.item_sn).trim().toLowerCase() === String(h.item_sn).trim().toLowerCase());
+        if (!isSameItem) return false;
+
+        const otherTime = new Date(other.tanggal_serah_terima || other.timestamp || 0).getTime();
+        return (otherTime > hTime) || (otherTime === hTime && (Number(other.id) || 0) > hId);
+    });
+
+    const isAlreadyReturned = !!returnRecord;
+    return {
+        isReturn: false,
+        isAlreadyReturned: isAlreadyReturned,
+        returnRecord: returnRecord || null,
+        isCurrentActiveHolder: !isAlreadyReturned
+    };
+}
+window.getHandoverItemLifecycle = getHandoverItemLifecycle;
+
 function filteredHandoverData() {
     if (!handoverData || !Array.isArray(handoverData)) {
         return [];
@@ -6268,15 +6307,19 @@ function filteredHandoverData() {
 
     var filtered = handoverData.filter(function (h) {
         if (!h) return false;
+        const lifecycle = getHandoverItemLifecycle(h);
         if (jenisFilter === 'Penerimaan') {
-            if ((h.jenis || '').toLowerCase().includes('kembali')) return false;
+            // Aset Sedang Dipakai: ONLY active unreturned items
+            if (lifecycle.isReturn || lifecycle.isAlreadyReturned) return false;
         } else if (jenisFilter === 'Pengembalian') {
-            if (!(h.jenis || '').toLowerCase().includes('kembali')) return false;
+            // Riwayat Pengembalian: ONLY return records
+            if (!lifecycle.isReturn) return false;
         }
         if (search) {
             var matchesSearch =
                 (h.item_id && h.item_id.toLowerCase().includes(search)) ||
                 (h.item_name && h.item_name.toLowerCase().includes(search)) ||
+                (h.item_sn && h.item_sn.toLowerCase().includes(search)) ||
                 (h.pihak_penyerah && h.pihak_penyerah.toLowerCase().includes(search)) ||
                 (h.pihak_penerima && h.pihak_penerima.toLowerCase().includes(search)) ||
                 (h.no_berita_acara && h.no_berita_acara.toLowerCase().includes(search));
@@ -6341,7 +6384,11 @@ function renderHandoverTable() {
     const pageNumbers = document.getElementById('handoverPageNumbers');
 
     const countAll = (handoverData || []).length;
-    const countPenerimaan = (handoverData || []).filter(x => !(x.jenis || '').toLowerCase().includes('kembali')).length;
+    // Active assets in use: Penerimaan that have NOT been returned yet
+    const countPenerimaan = (handoverData || []).filter(h => {
+        const lc = getHandoverItemLifecycle(h);
+        return !lc.isReturn && !lc.isAlreadyReturned;
+    }).length;
     const countPengembalian = (handoverData || []).filter(x => (x.jenis || '').toLowerCase().includes('kembali')).length;
 
     const elAll = document.getElementById('countTabAll');
@@ -6360,25 +6407,30 @@ function renderHandoverTable() {
         if (pagination) pagination.style.display = 'flex';
 
         tableBody.innerHTML = paginatedData.map(h => {
-            const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+            const lifecycle = getHandoverItemLifecycle(h);
+            const isReturn = lifecycle.isReturn;
             const isPenerimaan = !isReturn;
+            const isAlreadyReturned = lifecycle.isAlreadyReturned;
+            const returnRecord = lifecycle.returnRecord;
+
             const jenisClass = isReturn ? 'pill-pengembalian' : 'pill-penerimaan';
             const jenisIcon = isReturn ? 'fa-undo' : 'fa-arrow-down';
             const jenisLabel = isReturn ? 'Pengembalian' : 'Penerimaan';
             const tgl = formatTanggalIndonesia(h.tanggal_serah_terima) || '-';
 
-            // Check if this item has already been returned
-            const isAlreadyReturned = isPenerimaan && (handoverData || []).some(other => {
-                return other.id !== h.id && 
-                       (other.jenis || '').toLowerCase().includes('kembali') && 
-                       (other.item_id === h.item_id || (other.item_sn && h.item_sn && other.item_sn === h.item_sn));
-            });
+            const statusBadge = isPenerimaan
+                ? (isAlreadyReturned
+                    ? `<span class="badge-status-returned" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; background: rgba(100, 116, 139, 0.12); color: #64748b; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(100, 116, 139, 0.25);"><i class="fas fa-check-circle" style="color: #10b981;"></i> Telah Kembali</span>`
+                    : `<span class="badge-status-active" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; background: rgba(16, 185, 129, 0.12); color: #10b981; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.25);"><i class="fas fa-dot-circle" style="font-size: 8px;"></i> Aktif Dipakai</span>`)
+                : `<span class="badge-status-closed" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; background: rgba(245, 158, 11, 0.12); color: #d97706; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.25);"><i class="fas fa-warehouse"></i> Masuk Gudang</span>`;
 
             const returnActionBtn = isPenerimaan
                 ? (isAlreadyReturned
-                    ? `<button type="button" class="btn-action-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); cursor: default;" title="Unit ini sudah dibuatkan BAST Pengembalian"><i class="fas fa-check-circle"></i></button>`
+                    ? `<button type="button" class="btn-action-icon" onclick="openHandoverDetailModal('${returnRecord ? returnRecord.id : ''}')" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); cursor: pointer;" title="Unit telah dikembalikan ke gudang (BAST #${returnRecord ? (returnRecord.no_berita_acara || returnRecord.id) : ''}). Klik untuk lihat dokumen pengembalian."><i class="fas fa-check-circle"></i></button>`
                     : `<button type="button" class="btn-action-icon btn-return-action" onclick="triggerQuickReturn('${h.id}')" title="Proses Pengembalian Aset (Auto-Fill Form)" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.35);"><i class="fas fa-undo"></i></button>`)
                 : '';
+
+            const historyBtn = `<button type="button" class="btn-action-icon btn-history-log" onclick="openAssetHistoryTimeline('${h.item_id || ''}', '${h.item_sn || ''}')" title="Lihat Log Riwayat Pergerakan Unit" style="background: rgba(99, 102, 241, 0.12); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3);"><i class="fas fa-history"></i></button>`;
 
             const condBefore = (h.kondisi_before || 'Baik').trim();
             const condAfter = (h.kondisi_after || 'Baik').trim();
@@ -6397,9 +6449,12 @@ function renderHandoverTable() {
                         </div>
                     </td>
                     <td>
-                        <span class="handover-pill ${jenisClass}">
-                            <i class="fas ${jenisIcon}"></i> ${jenisLabel}
-                        </span>
+                        <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 3px;">
+                            <span class="handover-pill ${jenisClass}">
+                                <i class="fas ${jenisIcon}"></i> ${jenisLabel}
+                            </span>
+                            ${statusBadge}
+                        </div>
                     </td>
                     <td>
                         <div class="unit-cell">
@@ -6430,6 +6485,7 @@ function renderHandoverTable() {
                     <td>
                         <div class="table-actions-cluster">
                             ${returnActionBtn}
+                            ${historyBtn}
                             <button class="btn-action-icon btn-view" onclick="openHandoverDetailModal('${h.id}')" title="Lihat Detail BASTB & TTD"><i class="fas fa-eye"></i></button>
                             <button class="btn-action-icon btn-edit" onclick="openEditHandoverModal('${h.id}')" title="Edit Data Serah Terima"><i class="fas fa-edit"></i></button>
                             <button class="btn-action-icon btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BASTB PDF"><i class="fas fa-file-pdf"></i></button>
@@ -10900,3 +10956,202 @@ async function triggerQuickReturn(handoverId) {
     showToast(`Form Pengembalian untuk ${h.pihak_penerima || 'Karyawan'} siap! Masukkan No. BA dari Sheet Pusat.`, 'info');
 }
 window.triggerQuickReturn = triggerQuickReturn;
+
+// ========================================================
+// ASSET MOVEMENT TIMELINE & AUDIT TRAIL MODAL (OPSI C)
+// ========================================================
+function openAssetHistoryTimeline(itemId, itemSn) {
+    if (!itemId && !itemSn) {
+        showToast('ID atau Serial Number aset tidak ditemukan!', true);
+        return;
+    }
+
+    // 1. Locate item in inventoryData
+    const invItem = (inventoryData || []).find(i => 
+        (itemId && String(i.id).trim().toLowerCase() === String(itemId).trim().toLowerCase()) ||
+        (itemSn && i.sn && String(i.sn).trim() !== '' && String(i.sn).trim().toLowerCase() === String(itemSn).trim().toLowerCase())
+    ) || {};
+
+    const resolvedId = invItem.id || itemId || '-';
+    const resolvedSn = invItem.sn || itemSn || '-';
+    const resolvedName = invItem.name || 'Perangkat IT';
+    const resolvedMerk = invItem.merk || '-';
+    const resolvedLoc = invItem.lokasi || '-';
+
+    // 2. Locate all handovers for this item
+    const handovers = (handoverData || []).filter(h => {
+        const matchId = (h.item_id && resolvedId && resolvedId !== '-' && String(h.item_id).trim().toLowerCase() === String(resolvedId).trim().toLowerCase());
+        const matchSn = (h.item_sn && resolvedSn && resolvedSn !== '-' && String(h.item_sn).trim().toLowerCase() === String(resolvedSn).trim().toLowerCase());
+        return matchId || matchSn;
+    });
+
+    // Sort handovers chronologically: oldest first
+    handovers.sort((a, b) => {
+        const timeA = new Date(a.tanggal_serah_terima || a.timestamp || 0).getTime();
+        const timeB = new Date(b.tanggal_serah_terima || b.timestamp || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+
+    // Determine current status
+    let statusPillHtml = '';
+    if (handovers.length === 0) {
+        statusPillHtml = `<span style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-warehouse"></i> Standby di Gudang (Belum ada BAST)</span>`;
+    } else {
+        const latest = handovers[handovers.length - 1];
+        const isReturn = (latest.jenis || '').toLowerCase().includes('kembali');
+        if (isReturn) {
+            statusPillHtml = `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.35); padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-warehouse"></i> Standby di Gudang (Telah Kembali)</span>`;
+        } else {
+            statusPillHtml = `<span style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-user-check"></i> Aktif: <strong>${latest.pihak_penerima || 'User'}</strong> (${latest.lokasi_baru || 'Kantor'})</span>`;
+        }
+    }
+
+    // Populate modal headers
+    const elBadge = document.getElementById('timelineModalItemBadge');
+    const elSub = document.getElementById('timelineModalItemSubtitle');
+    const elName = document.getElementById('timelineItemName');
+    const elMerk = document.getElementById('timelineItemMerk');
+    const elSn = document.getElementById('timelineItemSn');
+    const elLoc = document.getElementById('timelineItemLoc');
+    const elStatus = document.getElementById('timelineCurrentStatusPill');
+    const container = document.getElementById('timelineListContainer');
+
+    if (elBadge) elBadge.textContent = `#${resolvedId}`;
+    if (elSub) elSub.textContent = `Riwayat mutasi, serah terima, dan log pengembalian unit`;
+    if (elName) elName.textContent = resolvedName;
+    if (elMerk) elMerk.textContent = resolvedMerk !== '-' ? resolvedMerk : '';
+    if (elSn) elSn.textContent = resolvedSn;
+    if (elLoc) elLoc.textContent = resolvedLoc;
+    if (elStatus) elStatus.innerHTML = statusPillHtml;
+
+    // Generate timeline cards
+    let timelineHtml = '';
+
+    // Step 1: Pendaftaran / Masuk Master Inventaris (jika ada data invItem)
+    const tglMasuk = invItem.tanggalMasuk || invItem.date || invItem.createdAt;
+    if (tglMasuk) {
+        const formattedDate = formatTanggalIndonesia(tglMasuk) || '-';
+        timelineHtml += `
+            <div class="timeline-item">
+                <div class="timeline-item-dot dot-register" title="Pendaftaran Barang Masuk">
+                    <i class="fas fa-box-open"></i>
+                </div>
+                <div class="timeline-card">
+                    <div class="timeline-card-header">
+                        <div class="timeline-card-title">
+                            <span style="color: #60a5fa;"><i class="fas fa-plus-circle"></i> Registrasi Inventaris Baru</span>
+                        </div>
+                        <div class="timeline-card-date"><i class="far fa-calendar-alt"></i> ${formattedDate}</div>
+                    </div>
+                    <div class="timeline-grid">
+                        <div>
+                            <span class="timeline-meta-label">Lokasi Awal</span>
+                            <span class="timeline-meta-val"><i class="fas fa-map-marker-alt"></i> ${invItem.lokasi || 'Gudang'}</span>
+                        </div>
+                        <div>
+                            <span class="timeline-meta-label">Kondisi Awal</span>
+                            <span class="timeline-meta-val">${invItem.kondisiBefore || 'Baik'}</span>
+                        </div>
+                        <div>
+                            <span class="timeline-meta-label">Serial Number</span>
+                            <span class="timeline-meta-val font-mono">${resolvedSn}</span>
+                        </div>
+                        ${invItem.catatan ? `
+                        <div style="grid-column: 1 / -1;">
+                            <span class="timeline-meta-label">Catatan Registrasi</span>
+                            <span class="timeline-meta-val">${invItem.catatan}</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Step 2..N: Handover transactions
+    if (handovers.length === 0) {
+        timelineHtml += `
+            <div class="timeline-item">
+                <div class="timeline-item-dot" style="background: rgba(100, 116, 139, 0.4); color: #cbd5e1;">
+                    <i class="fas fa-info"></i>
+                </div>
+                <div class="timeline-card" style="border-style: dashed; text-align: center; padding: 20px;">
+                    <span style="color: var(--text-secondary); font-size: 13px;">Belum pernah dilakukan transaksi BAST (Penerimaan / Pengembalian) untuk unit ini.</span>
+                </div>
+            </div>
+        `;
+    } else {
+        handovers.forEach((h) => {
+            const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+            const dotClass = isReturn ? 'dot-pengembalian' : 'dot-penerimaan';
+            const dotIcon = isReturn ? 'fa-undo' : 'fa-arrow-down';
+            const titleColor = isReturn ? '#f59e0b' : '#10b981';
+            const titleText = isReturn ? 'BAST Pengembalian Unit (Return)' : 'BAST Penerimaan (Penyerahan ke Karyawan)';
+            const tgl = formatTanggalIndonesia(h.tanggal_serah_terima) || '-';
+
+            timelineHtml += `
+                <div class="timeline-item">
+                    <div class="timeline-item-dot ${dotClass}" title="${isReturn ? 'Pengembalian' : 'Penerimaan'}">
+                        <i class="fas ${dotIcon}"></i>
+                    </div>
+                    <div class="timeline-card">
+                        <div class="timeline-card-header">
+                            <div>
+                                <div class="timeline-card-title" style="color: ${titleColor};">
+                                    <i class="fas ${dotIcon}"></i> ${titleText}
+                                </div>
+                                <div style="font-size: 12px; margin-top: 2px;">
+                                    <span class="ba-number-chip" onclick="openHandoverDetailModal('${h.id}')" title="Klik untuk lihat BAST">${h.no_berita_acara || 'Tanpa No. BA'}</span>
+                                </div>
+                            </div>
+                            <div class="timeline-card-date"><i class="far fa-calendar-alt"></i> ${tgl}</div>
+                        </div>
+                        <div class="timeline-grid">
+                            <div>
+                                <span class="timeline-meta-label">${isReturn ? 'Pihak Pengembali' : 'Pihak Penyerah'}</span>
+                                <span class="timeline-meta-val"><i class="fas fa-user-circle"></i> ${h.pihak_penyerah || '-'}</span>
+                            </div>
+                            <div>
+                                <span class="timeline-meta-label">Pihak Penerima</span>
+                                <span class="timeline-meta-val"><i class="fas fa-user-check"></i> ${h.pihak_penerima || '-'}</span>
+                            </div>
+                            <div>
+                                <span class="timeline-meta-label">Lokasi Penempatan</span>
+                                <span class="timeline-meta-val"><i class="fas fa-map-marker-alt"></i> ${h.lokasi_baru || '-'}</span>
+                            </div>
+                            <div>
+                                <span class="timeline-meta-label">Kondisi Fisik</span>
+                                <span class="timeline-meta-val">${h.kondisi_before || 'Baik'} ➔ ${h.kondisi_after || 'Baik'}</span>
+                            </div>
+                            ${h.catatan ? `
+                            <div style="grid-column: 1 / -1;">
+                                <span class="timeline-meta-label">Catatan BAST</span>
+                                <span class="timeline-meta-val" style="font-style: italic;">"${h.catatan}"</span>
+                            </div>` : ''}
+                        </div>
+                        <div style="margin-top: 10px; display: flex; gap: 8px; justify-content: flex-end;">
+                            <button type="button" class="btn-action-icon btn-view" onclick="openHandoverDetailModal('${h.id}')" title="Lihat BAST & TTD" style="width: auto; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fas fa-eye"></i> Detail BAST
+                            </button>
+                            <button type="button" class="btn-action-icon btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download PDF" style="width: auto; padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                                <i class="fas fa-file-pdf"></i> Unduh PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    if (container) container.innerHTML = timelineHtml;
+    openModal('assetHistoryTimelineModal');
+}
+window.openAssetHistoryTimeline = openAssetHistoryTimeline;
+
+window.openAssetHistoryFromViewModal = function() {
+    const id = window.currentViewItemId;
+    if (!id) return;
+    const item = (inventoryData || []).find(i => String(i.id) === String(id));
+    openAssetHistoryTimeline(id, item ? item.sn : '');
+};
+
