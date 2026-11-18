@@ -9801,3 +9801,45 @@ td .btn-excel:hover {
         margin: 12px 0 20px 0 !important;
     }
 }
+
+/* ==============================================================================
+   ENHANCED STYLES: AUDIT CLICKABLE, PILL PENGEMBALIAN, BARCODE GRID & LIFECYCLE
+   ============================================================================== */
+.audit-clickable-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.audit-clickable-row:hover {
+    background-color: rgba(37, 99, 235, 0.06) !important;
+}
+
+body.dark-theme .audit-clickable-row:hover {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+.pill-pengembalian {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+.export-btn.barcode-all {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);
+}
+
+.export-btn.barcode-all:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.registration-mode-bar {
+    user-select: none;
+}
+
+.mode-pill-btn:hover {
+    filter: brightness(1.05);
+}
+

@@ -2361,6 +2361,62 @@ async function handleInventorySubmit(e) {
     const rawLoc = document.getElementById('itemLocation').value;
     const resolvedCubicle = extractCubicleId(rawLoc);
 
+    // Check Batch Mode (Point 2)
+    const regMode = document.getElementById('registrationMode') ? document.getElementById('registrationMode').value : 'single';
+    if (regMode === 'batch') {
+        const rawBatchSn = document.getElementById('batchSnList') ? document.getElementById('batchSnList').value : '';
+        const snList = rawBatchSn.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        if (snList.length === 0) {
+            showToast('Mohon masukkan minimal 1 Serial Number pada daftar batch!', 'warning');
+            return;
+        }
+
+        const batchPayload = {
+            commonData: {
+                name: document.getElementById('itemName').value,
+                merk: document.getElementById('itemMerk').value,
+                lokasi: rawLoc,
+                cubicle_id: resolvedCubicle,
+                kondisiBefore: document.getElementById('itemKondisiBefore').value,
+                checklist: document.getElementById('itemChecklist').value,
+                kondisiAfter: document.getElementById('itemKondisiAfter').value,
+                catatan: document.getElementById('itemCatatan').value,
+                tanggalMasuk: document.getElementById('itemTanggalMasuk').value,
+                date: document.getElementById('itemDate').value
+            },
+            items: snList.map(sn => ({ sn }))
+        };
+
+        try {
+            const token = localStorage.getItem('token') || (typeof currentUser !== 'undefined' && currentUser && currentUser.token) || '';
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const res = await fetch('/api/inventory/batch', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(batchPayload)
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast(`Berhasil mendaftarkan ${data.count} unit aset baru sekaligus!`, 'success');
+                document.getElementById('inventoryForm').reset();
+                document.getElementById('itemDate').valueAsDate = new Date();
+                switchRegistrationMode('single');
+                await loadInventory();
+                navigateToPage('inventory');
+                return;
+            } else {
+                showToast(data.error || 'Gagal mendaftarkan batch aset', 'error');
+                return;
+            }
+        } catch (err) {
+            console.error('Batch registration error:', err);
+            showToast('Terjadi kesalahan pendaftaran batch', 'error');
+            return;
+        }
+    }
+
     const newItem = {
         name: document.getElementById('itemName').value,
         merk: document.getElementById('itemMerk').value,
@@ -2720,6 +2776,11 @@ function viewItem(id) {
 
     // Tanggal
     document.getElementById('viewItemDate').textContent = formatDate(item.date || item.tanggalMasuk);
+
+    // Lifecycle Movement & Operational Status Timeline (Point 1)
+    if (typeof renderItemLifecycleTimeline === 'function') {
+        renderItemLifecycleTimeline(item);
+    }
 
     // Generate QR in modal
     const modalQr = document.getElementById('modal-qrcode');
@@ -4158,6 +4219,13 @@ async function selectAuditCondition(kondisi, persist = true) {
         });
     }
 
+    // Toggle relocation box for defective / missing items (Point 7)
+    const relBox = document.getElementById('scanRelocationBox');
+    if (relBox) {
+        const isIssue = kondisi.toLowerCase().includes('rusak') || kondisi.toLowerCase().includes('hilang');
+        relBox.style.display = isIssue ? 'block' : 'none';
+    }
+
     if (!persist || !currentScannedItem || !currentScannedItem.id) return;
 
     try {
@@ -4390,7 +4458,7 @@ function renderScanTable() {
                </button>`;
 
         return `
-            <tr class="${rowClass}" data-id="${item.id}">
+            <tr class="${rowClass} audit-clickable-row" data-id="${item.id}" onclick="handleScanRowClick('${item.id}', event)" title="Klik baris untuk periksa & audit unit">
                 <td>${statusBadge}</td>
                 <td><span class="barcode-display">${item.id || '-'}</span></td>
                 <td>${getCategoryBadgeHtml(item.name)}</td>
@@ -5655,6 +5723,18 @@ function toggleHandoverFields() {
         if (labelKepada) labelKepada.innerHTML = '<i class="fas fa-user-check"></i> Pihak Penerima (Admin / Logistik) <span class="required">*</span>';
         if (inputDari) inputDari.placeholder = 'Contoh: PT Mitra Solusi / Vendor Pengadaan';
         if (inputKepada) inputKepada.placeholder = 'Nama PIC penerima kantor ICONNET';
+    } else if (jenis === 'Pengembalian') {
+        if (labelDari) labelDari.innerHTML = '<i class="fas fa-user-times"></i> Pihak Pengembali (Pengguna Asal) <span class="required">*</span>';
+        if (labelKepada) labelKepada.innerHTML = '<i class="fas fa-warehouse"></i> Pihak Penerima (Technical Support / Gudang) <span class="required">*</span>';
+        if (inputDari) inputDari.placeholder = 'Nama karyawan yang mengembalikan aset';
+        if (inputKepada) {
+            inputKepada.placeholder = 'Technical Support / Tim Aset';
+            if (!inputKepada.value) inputKepada.value = 'Technical Support / Tim Aset';
+        }
+        const inputLokasi = document.getElementById('handoverLokasi');
+        if (inputLokasi && (!inputLokasi.value || inputLokasi.value.trim() === '')) {
+            inputLokasi.value = 'Gudang Penyimpanan (Standby)';
+        }
     } else {
         if (labelDari) labelDari.innerHTML = '<i class="fas fa-user-check"></i> Pihak Penyerah (Dari) <span class="required">*</span>';
         if (labelKepada) labelKepada.innerHTML = '<i class="fas fa-user-plus"></i> Pihak Penerima (Kepada) <span class="required">*</span>';
@@ -6265,9 +6345,10 @@ function renderHandoverTable() {
         if (pagination) pagination.style.display = 'flex';
 
         tableBody.innerHTML = paginatedData.map(h => {
+            const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
             const isPenerimaan = (h.jenis || '').toLowerCase().includes('penerimaan');
-            const jenisClass = isPenerimaan ? 'pill-penerimaan' : 'pill-penyerahan';
-            const jenisIcon = isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up';
+            const jenisClass = isReturn ? 'pill-pengembalian' : (isPenerimaan ? 'pill-penerimaan' : 'pill-penyerahan');
+            const jenisIcon = isReturn ? 'fa-undo' : (isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up');
             const tgl = formatTanggalIndonesia(h.tanggal_serah_terima) || '-';
 
             const condBefore = (h.kondisi_before || 'Baik').trim();
@@ -6927,6 +7008,9 @@ async function generateBA_excel(id) {
         const nomorBA = data.no_berita_acara || data.noBeritaAcara || generateNomorBA(data.tanggal_serah_terima, data.id);
         const rawItemName = (data.item_name || data.itemName || 'LAPTOP').toUpperCase();
         const titleItem = rawItemName.includes('LAPTOP') ? 'LAPTOP' : (rawItemName.includes('MONITOR') ? 'MONITOR' : (rawItemName.includes('PC') ? 'PC / DESKTOP' : rawItemName));
+        const isReturn = (data.jenis || '').toLowerCase().includes('kembali');
+        const docActionTitle = isReturn ? 'PENGEMBALIAN' : 'SERAH TERIMA';
+        const openActionText = isReturn ? 'telah dikembalikan ke ' : 'telah diterima ke ';
 
         // 1. HEADER SECTION (Logo & Pita Dekorasi Resmi PLN Icon Plus)
         worksheet.getRow(1).height = 30;
@@ -6959,7 +7043,7 @@ async function generateBA_excel(id) {
         // 2. KOTAK 1: JUDUL BERITA ACARA & NOMOR DOKUMEN
         worksheet.mergeCells('A3:F3');
         const cTitle = worksheet.getCell('A3');
-        cTitle.value = `BERITA ACARA SERAH TERIMA ${titleItem}`;
+        cTitle.value = `BERITA ACARA ${docActionTitle} ${titleItem}`;
         cTitle.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
         cTitle.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(3).height = 19;
@@ -6983,7 +7067,7 @@ async function generateBA_excel(id) {
         // 3. KOTAK 2: KALIMAT PEMBUKA FORMAT RESMI DENGAN TANGGAL TERBILANG
         worksheet.mergeCells('A6:F7');
         const cOpen = worksheet.getCell('A6');
-        cOpen.value = `Pada hari ini ${namaHari}, tanggal ${tanggalTerbilang} Bulan ${namaBulan} Tahun ${tahunTerbilang} (${tglNumerik}), kami yang bertanda tangan dibawah ini menyatakan bahwa Perangkat telah diterima ke Technical Support dengan rincian sebagai berikut:`;
+        cOpen.value = `Pada hari ini ${namaHari}, tanggal ${tanggalTerbilang} Bulan ${namaBulan} Tahun ${tahunTerbilang} (${tglNumerik}), kami yang bertanda tangan dibawah ini menyatakan bahwa Perangkat ${openActionText}Technical Support dengan rincian sebagai berikut:`;
         cOpen.font = { name: 'Calibri', size: 8.5, color: { argb: 'FF000000' } };
         cOpen.alignment = { wrapText: true, vertical: 'middle', horizontal: 'left', indent: 1 };
         worksheet.getRow(6).height = 18;
@@ -10032,3 +10116,629 @@ window.openDesignerAddCubicleModal = openDesignerAddCubicleModal;
 window.promptAddCustomCubicleToDesigner = openDesignerAddCubicleModal;
 window.quickFillDesignerCubicle = quickFillDesignerCubicle;
 window.submitDesignerAddCubicle = submitDesignerAddCubicle;
+
+// ==============================================================================
+// MODUL EXTENSION FITUR BARU: SIKLUS HIDUP, BATCH INTAKE, BARCODE GRID, BAST RETURN, LOG NON-INV, RELOKASI AUDIT
+// ==============================================================================
+
+// --- POINT 1: SIKLUS HIDUP ASET & TIMELINE PERGERAKAN ---
+function renderItemLifecycleTimeline(item) {
+    const container = document.getElementById('viewItemLifecycleTimeline');
+    const statusBadge = document.getElementById('viewItemCurrentStatusBadge');
+    if (!container) return;
+
+    const loc = (item.lokasi || '').trim();
+    const condAfter = (item.kondisiAfter || item.kondisiBefore || 'Baik').trim();
+    let isOperational = false;
+    let statusLabel = 'Operasional';
+    let statusBg = 'rgba(16, 185, 129, 0.15)';
+    let statusColor = '#10b981';
+
+    if (condAfter.toLowerCase().includes('rusak') || loc.toLowerCase().includes('rusak') || loc.toLowerCase().includes('servis')) {
+        statusLabel = 'Perlu Servis / Rusak';
+        statusBg = 'rgba(239, 68, 68, 0.15)';
+        statusColor = '#ef4444';
+    } else if (loc.toLowerCase().includes('keluar') || loc.toLowerCase().includes('vendor')) {
+        statusLabel = 'Keluar Kantor';
+        statusBg = 'rgba(139, 92, 246, 0.15)';
+        statusColor = '#8b5cf6';
+    } else if (loc.toLowerCase().includes('gudang') || loc.toLowerCase().includes('standby') || !loc || loc === '-') {
+        statusLabel = 'Standby Gudang';
+        statusBg = 'rgba(245, 158, 11, 0.15)';
+        statusColor = '#f59e0b';
+    } else {
+        isOperational = true;
+        statusLabel = `Operasional (${loc})`;
+    }
+
+    if (statusBadge) {
+        statusBadge.textContent = statusLabel;
+        statusBadge.style.background = statusBg;
+        statusBadge.style.color = statusColor;
+        statusBadge.style.borderColor = statusColor;
+    }
+
+    const events = [];
+
+    // 1. Masuk Awal
+    const tglMasuk = item.tanggalMasuk || item.date;
+    events.push({
+        title: 'Barang Masuk & Registrasi Pertama',
+        date: tglMasuk ? formatDate(tglMasuk) : 'Tanggal tidak tercatat',
+        icon: 'fa-box',
+        badge: 'Masuk Awal',
+        badgeColor: '#3b82f6',
+        desc: `Unit pertama kali diregistrasi. Kondisi awal: <strong>${item.kondisiBefore || 'Baik'}</strong>. Lokasi penempatan awal: <strong>${item.lokasi || 'Gudang'}</strong>.`
+    });
+
+    // 2. Handover History
+    const itemHandovers = (handoverData || []).filter(h => {
+        return h.item_id === item.id || (item.sn && h.sn === item.sn) || (item.name === h.item_name && item.sn === h.sn);
+    }).sort((a, b) => new Date(a.tanggal_serah_terima) - new Date(b.tanggal_serah_terima));
+
+    itemHandovers.forEach(h => {
+        const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+        const isPenerimaan = (h.jenis || '').toLowerCase().includes('penerimaan');
+        const icon = isReturn ? 'fa-undo' : (isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up');
+        const badgeText = isReturn ? 'Pengembalian' : (isPenerimaan ? 'Penerimaan' : 'Penyerahan Operasional');
+        const badgeColor = isReturn ? '#f59e0b' : (isPenerimaan ? '#10b981' : '#6366f1');
+
+        events.push({
+            title: `BAST ${h.no_berita_acara || ''}`,
+            date: formatTanggalIndonesia(h.tanggal_serah_terima) || '-',
+            icon: icon,
+            badge: badgeText,
+            badgeColor: badgeColor,
+            desc: `Dari: <strong>${h.pihak_penyerah || '-'}</strong> ➔ Kepada: <strong>${h.pihak_penerima || '-'}</strong> (${h.divisi_pengguna || 'Operasional'}). Lokasi Baru: <strong>${h.lokasi_baru || item.lokasi || 'Kantor'}</strong>.`
+        });
+    });
+
+    // 3. Status Terkini
+    events.push({
+        title: 'Status & Posisi Lapangan Saat Ini',
+        date: 'Terkini',
+        icon: isOperational ? 'fa-desktop' : 'fa-warehouse',
+        badge: statusLabel,
+        badgeColor: statusColor,
+        desc: `Lokasi saat ini: <strong>${loc || 'Gudang'}</strong> • Kondisi terkini: <strong>${item.kondisiAfter || 'Baik'}</strong> • Status Audit: <strong>${item.checklist === 'Ya' ? 'Sudah Dicek Audit' : 'Belum Dicek Audit'}</strong>.`
+    });
+
+    container.innerHTML = events.map((ev, idx) => `
+        <div style="display: flex; gap: 12px; position: relative; padding-bottom: ${idx === events.length - 1 ? '0' : '14px'};">
+            ${idx !== events.length - 1 ? '<div style="position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: var(--border);"></div>' : ''}
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: ${ev.badgeColor}22; color: ${ev.badgeColor}; border: 1.5px solid ${ev.badgeColor}; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; z-index: 1;">
+                <i class="fas ${ev.icon}"></i>
+            </div>
+            <div style="flex: 1; background: var(--bg-card); padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 6px;">
+                    <strong style="font-size: 12.5px; color: var(--text-primary);">${ev.title}</strong>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <span style="font-size: 10.5px; padding: 2px 7px; border-radius: 4px; background: ${ev.badgeColor}20; color: ${ev.badgeColor}; font-weight: 600;">${ev.badge}</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);"><i class="far fa-clock"></i> ${ev.date}</span>
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;">${ev.desc}</div>
+            </div>
+        </div>
+    `).join('');
+}
+window.renderItemLifecycleTimeline = renderItemLifecycleTimeline;
+
+// --- POINT 2: BATCH REGISTRATION HELPERS ---
+function switchRegistrationMode(mode) {
+    const regModeInput = document.getElementById('registrationMode');
+    const btnSingle = document.getElementById('btnModeSingle');
+    const btnBatch = document.getElementById('btnModeBatch');
+    const batchBox = document.getElementById('batchIntakeBox');
+    const singleSnRow = document.getElementById('singleSnRow');
+    const itemSn = document.getElementById('itemSn');
+    const submitBtn = document.querySelector('#inventoryForm .submit-btn');
+
+    if (regModeInput) regModeInput.value = mode;
+
+    if (mode === 'batch') {
+        if (btnSingle) {
+            btnSingle.classList.remove('active');
+            btnSingle.style.background = 'transparent';
+            btnSingle.style.color = 'var(--text-secondary)';
+        }
+        if (btnBatch) {
+            btnBatch.classList.add('active');
+            btnBatch.style.background = 'var(--primary)';
+            btnBatch.style.color = '#fff';
+        }
+        if (batchBox) batchBox.style.display = 'block';
+        if (singleSnRow) singleSnRow.style.display = 'none';
+        if (itemSn) itemSn.removeAttribute('required');
+        if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-layer-group"></i> Simpan Batch Inventaris Multi-Unit';
+        syncBatchQuantity();
+    } else {
+        if (btnSingle) {
+            btnSingle.classList.add('active');
+            btnSingle.style.background = 'var(--primary)';
+            btnSingle.style.color = '#fff';
+        }
+        if (btnBatch) {
+            btnBatch.classList.remove('active');
+            btnBatch.style.background = 'transparent';
+            btnBatch.style.color = 'var(--text-secondary)';
+        }
+        if (batchBox) batchBox.style.display = 'none';
+        if (singleSnRow) singleSnRow.style.display = 'flex';
+        if (itemSn) itemSn.setAttribute('required', 'required');
+        if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan & Terbitkan QR Code';
+    }
+}
+window.switchRegistrationMode = switchRegistrationMode;
+
+function syncBatchQuantity() {
+    const qtyInput = document.getElementById('batchQty');
+    const prefixInput = document.getElementById('batchPrefix');
+    const itemName = document.getElementById('itemName')?.value || 'BRG';
+    if (prefixInput && (!prefixInput.value || prefixInput.value === 'KRS-2026-')) {
+        const prefixCode = itemName.slice(0, 3).toUpperCase();
+        prefixInput.value = `${prefixCode}-${new Date().getFullYear()}-`;
+    }
+    updateBatchSnCounter();
+}
+window.syncBatchQuantity = syncBatchQuantity;
+
+function autoGenerateBatchSnList() {
+    const qtyInput = document.getElementById('batchQty');
+    const prefixInput = document.getElementById('batchPrefix');
+    const textarea = document.getElementById('batchSnList');
+    if (!qtyInput || !textarea) return;
+
+    const qty = parseInt(qtyInput.value) || 5;
+    const prefix = prefixInput ? prefixInput.value.trim() : 'SN-';
+    const lines = [];
+    for (let i = 1; i <= qty; i++) {
+        lines.push(`${prefix}${String(i).padStart(3, '0')}`);
+    }
+    textarea.value = lines.join('\n');
+    updateBatchSnCounter();
+    showToast(`Dihasilkan ${qty} Serial Number urut!`, 'success');
+}
+window.autoGenerateBatchSnList = autoGenerateBatchSnList;
+
+function updateBatchSnCounter() {
+    const textarea = document.getElementById('batchSnList');
+    const badge = document.getElementById('batchSnCountBadge');
+    const qtyInput = document.getElementById('batchQty');
+    if (!textarea || !badge) return;
+
+    const targetQty = qtyInput ? parseInt(qtyInput.value) || 1 : 1;
+    const lines = textarea.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+    badge.textContent = `${lines.length} / ${targetQty} SN Terisi`;
+
+    if (lines.length === targetQty) {
+        badge.style.background = 'rgba(16, 185, 129, 0.15)';
+        badge.style.color = '#10b981';
+    } else {
+        badge.style.background = 'rgba(59, 130, 246, 0.15)';
+        badge.style.color = 'var(--primary)';
+    }
+}
+window.updateBatchSnCounter = updateBatchSnCounter;
+
+// --- POINT 3: EXPORT ALL BARCODES (A4 GRID SHEET) ---
+function exportAllBarcodesPDF() {
+    const filterSelect = document.getElementById('exportFilter');
+    const filterVal = filterSelect ? filterSelect.value : 'all';
+    let items = inventoryData;
+    if (filterVal !== 'all') {
+        items = inventoryData.filter(i => (i.name || '').toLowerCase() === filterVal.toLowerCase());
+    }
+
+    if (!items || items.length === 0) {
+        showToast('Tidak ada data inventaris untuk diekspor barcode!', 'warning');
+        return;
+    }
+
+    const printWin = window.open('', '_blank', 'width=900,height=800');
+    if (!printWin) {
+        showToast('Popup diblokir browser, mohon izinkan popup!', 'error');
+        return;
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Sheet Barcode & Label Aset - PLN ICON PLUS</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm 6mm;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            background: #fff;
+            color: #0f172a;
+            padding: 10px;
+        }
+        .header-print {
+            text-align: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #0284c7;
+        }
+        .header-print h2 {
+            font-size: 15px;
+            font-weight: 800;
+            color: #0284c7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .header-print p {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+        .label-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6mm 4mm;
+        }
+        .label-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 6px 8px;
+            background: #fff;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            page-break-inside: avoid;
+            height: 33mm;
+            overflow: hidden;
+            position: relative;
+        }
+        .label-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #0284c7;
+        }
+        .label-qr {
+            width: 70px;
+            height: 70px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .label-qr img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .label-meta {
+            flex: 1;
+            min-width: 0;
+        }
+        .label-brand-tag {
+            font-size: 8px;
+            font-weight: 700;
+            color: #0284c7;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .label-id {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0f172a;
+            font-family: monospace;
+            line-height: 1.1;
+        }
+        .label-name {
+            font-size: 9.5px;
+            font-weight: 700;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+        }
+        .label-sn {
+            font-size: 8px;
+            color: #475569;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+        .label-loc {
+            font-size: 8px;
+            color: #0369a1;
+            background: #e0f2fe;
+            padding: 1px 4px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-top: 3px;
+            font-weight: 600;
+        }
+        .no-print-toolbar {
+            position: sticky;
+            top: 0;
+            background: #0f172a;
+            color: #fff;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .btn-print {
+            background: #0284c7;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        @media print {
+            .no-print-toolbar {
+                display: none !important;
+            }
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print-toolbar">
+        <div>
+            <strong>Sheet Label Barcode Terbit (${items.length} Unit)</strong>
+            <div style="font-size: 11px; opacity: 0.8;">Format Layout Cetak Stiker A4 Grid 3 Kolom</div>
+        </div>
+        <button class="btn-print" onclick="window.print()">Cetak / Simpan PDF</button>
+    </div>
+
+    <div class="header-print">
+        <h2>PT PLN ICON PLUS — SISTEM INVENTARIS TERPADU</h2>
+        <p>Lembar Cetak Stiker Barcode & Identifikasi Aset Operasional • Total: ${items.length} Unit</p>
+    </div>
+
+    <div class="label-grid">
+        ${items.map(item => `
+            <div class="label-card">
+                <div class="label-qr">
+                    <img src="${item.qrCode || `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(item.id)}`}" alt="QR">
+                </div>
+                <div class="label-meta">
+                    <span class="label-brand-tag">PLN ICON PLUS</span>
+                    <div class="label-id">${item.id || '-'}</div>
+                    <div class="label-name">${item.name || '-'} ${item.merk ? '(' + item.merk + ')' : ''}</div>
+                    <div class="label-sn">SN: ${item.sn || '-'}</div>
+                    <span class="label-loc">📍 ${item.lokasi || 'Kantor'}</span>
+                </div>
+            </div>
+        `).join('')}
+    </div>
+</body>
+</html>
+    `;
+
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+    showToast(`Membuka jendela cetak untuk ${items.length} label barcode!`, 'info');
+}
+window.exportAllBarcodesPDF = exportAllBarcodesPDF;
+
+// --- POINT 4: DYNAMIC HANDOVER CATEGORIES ---
+function populateHandoverCategories() {
+    const select = document.getElementById('handoverKategori');
+    if (!select) return;
+
+    const currentVal = select.value;
+    const defaultCats = ['Monitor', 'Laptop', 'Keyboard', 'Mouse', 'Headset', 'PC', 'TV'];
+    const dynamicCats = new Set(defaultCats);
+
+    (inventoryData || []).forEach(item => {
+        if (item.name && item.name.trim()) {
+            dynamicCats.add(item.name.trim());
+        }
+    });
+
+    const sortedCats = Array.from(dynamicCats).sort((a, b) => a.localeCompare(b));
+    let html = '<option value="">Pilih Kategori</option>';
+    sortedCats.forEach(cat => {
+        html += `<option value="${cat}">${cat}</option>`;
+    });
+
+    select.innerHTML = html;
+    if (currentVal && dynamicCats.has(currentVal)) {
+        select.value = currentVal;
+    }
+}
+window.populateHandoverCategories = populateHandoverCategories;
+
+// --- POINT 6: NON-INVENTORY USAGE LOGS & MUTATIONS ---
+let nonInventoryLogsData = [];
+
+async function loadNonInventoryLogs() {
+    const tbody = document.getElementById('nonInvLogsTableBody');
+    if (!tbody) return;
+    try {
+        const res = await fetch('/api/non-inventory/logs');
+        if (!res.ok) throw new Error('Gagal memuat log');
+        const logs = await res.json();
+        nonInventoryLogsData = Array.isArray(logs) ? logs : [];
+
+        if (nonInventoryLogsData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">Belum ada riwayat transaksi atau pengambilan barang non-inventaris.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = nonInventoryLogsData.map(log => {
+            const dateStr = log.timestamp ? formatDateTime(log.timestamp) : '-';
+            const isOut = log.action === 'STOCK_OUT';
+            const actionBadge = isOut 
+                ? '<span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); color: #ef4444; font-size: 11px; font-weight: 600;"><i class="fas fa-arrow-up"></i> Pengambilan</span>'
+                : '<span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; font-weight: 600;"><i class="fas fa-arrow-down"></i> Stok Masuk</span>';
+
+            const qtyText = isOut ? `-${log.qty || 1}` : `+${log.qty || 1}`;
+            const qtyColor = isOut ? '#ef4444' : '#10b981';
+
+            return `
+                <tr>
+                    <td style="font-size: 12px; color: var(--text-secondary);"><i class="far fa-clock"></i> ${dateStr}</td>
+                    <td><strong style="color: var(--text-primary);">${log.itemName || log.targetId || '-'}</strong></td>
+                    <td>${actionBadge}</td>
+                    <td style="text-align: center; font-weight: 700; color: ${qtyColor};">${qtyText}</td>
+                    <td><span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px;"><i class="fas fa-user-circle" style="color: var(--primary);"></i> ${log.operator || 'Admin'}</span></td>
+                    <td style="font-size: 12px; color: var(--text-secondary);">${log.reason || '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Error loading non-inventory logs:', e);
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 20px;">Gagal memuat riwayat log mutasi.</td></tr>';
+    }
+}
+window.loadNonInventoryLogs = loadNonInventoryLogs;
+
+async function exportNonInventoryLogsToExcel() {
+    if (!nonInventoryLogsData || nonInventoryLogsData.length === 0) {
+        showToast('Tidak ada data riwayat log untuk diexport!', 'warning');
+        return;
+    }
+
+    try {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Sistem Inventaris ICONNET';
+        const worksheet = workbook.addWorksheet('Log Pengambilan & Mutasi');
+
+        worksheet.columns = [
+            { header: 'No', key: 'no', width: 6 },
+            { header: 'Tanggal & Waktu', key: 'time', width: 22 },
+            { header: 'Nama Barang', key: 'itemName', width: 30 },
+            { header: 'Jenis Mutasi', key: 'type', width: 16 },
+            { header: 'Jumlah', key: 'qty', width: 12 },
+            { header: 'Diambil Oleh / Petugas', key: 'operator', width: 26 },
+            { header: 'Keperluan / Keterangan', key: 'reason', width: 40 }
+        ];
+
+        // Header style
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        nonInventoryLogsData.forEach((log, idx) => {
+            worksheet.addRow({
+                no: idx + 1,
+                time: log.timestamp ? formatDateTime(log.timestamp) : '-',
+                itemName: log.itemName || log.targetId || '-',
+                type: log.action === 'STOCK_OUT' ? 'PENGAMBILAN' : 'STOK MASUK',
+                qty: log.action === 'STOCK_OUT' ? -(log.qty || 1) : +(log.qty || 1),
+                operator: log.operator || 'Admin',
+                reason: log.reason || '-'
+            });
+        });
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Log_Pengambilan_NonInventaris_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        showToast('File Excel riwayat log berhasil didownload!', 'success');
+    } catch (e) {
+        console.error('Error exporting logs to excel:', e);
+        showToast('Gagal export log ke Excel', 'error');
+    }
+}
+window.exportNonInventoryLogsToExcel = exportNonInventoryLogsToExcel;
+
+// --- POINT 7: AUDIT DEFECT RELOCATION ---
+async function applyQuickRelocationInAudit() {
+    if (!currentScannedItem || !currentScannedItem.id) {
+        showToast('Tidak ada item yang aktif', 'warning');
+        return;
+    }
+    const sel = document.getElementById('scanRelocationSelect');
+    const targetLoc = sel ? sel.value : '';
+    if (!targetLoc) {
+        showToast('Pilih lokasi tujuan relokasi terlebih dahulu', 'warning');
+        return;
+    }
+
+    const cond = document.getElementById('scanSelectedCondition')?.value || currentScannedItem.kondisiAfter || 'Rusak Ringan';
+    try {
+        const res = await fetch('/api/inventory/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                searchValue: currentScannedItem.id,
+                kondisi: cond,
+                relokasi: targetLoc
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentScannedItem.lokasi = targetLoc;
+            currentScannedItem.cubicle_id = '';
+            currentScannedItem.kondisiAfter = cond;
+            const idx = inventoryData.findIndex(i => i.id === currentScannedItem.id);
+            if (idx !== -1) {
+                inventoryData[idx].lokasi = targetLoc;
+                inventoryData[idx].cubicle_id = '';
+                inventoryData[idx].kondisiAfter = cond;
+            }
+            const heroLocText = document.getElementById('scanHeroLocText');
+            if (heroLocText) heroLocText.textContent = targetLoc;
+            showToast(`Unit ${currentScannedItem.id} berhasil direlokasi ke "${targetLoc}" & dilepas dari kubikel!`, 'success');
+            renderScanTable();
+            if (typeof loadCubiclePositions === 'function') loadCubiclePositions();
+            if (typeof renderDashboardMap === 'function') renderDashboardMap();
+        } else {
+            showToast('Gagal melakukan relokasi unit', 'error');
+        }
+    } catch (e) {
+        console.error('Relocation error:', e);
+        showToast('Terjadi kesalahan relokasi', 'error');
+    }
+}
+window.applyQuickRelocationInAudit = applyQuickRelocationInAudit;
+
+// --- POINT 8: CLICKABLE AUDIT ROW HANDLER ---
+function handleScanRowClick(id, event) {
+    if (event && event.target && event.target.closest('.interactive-toggle')) {
+        return;
+    }
+    const item = inventoryData.find(i => i.id === id);
+    if (!item) return;
+    showScanResultPopup(item, item.checklist === 'Ya');
+}
+window.handleScanRowClick = handleScanRowClick;
+
+// Auto populate categories on inventory sync
+const originalLoadInventory = window.loadInventory;
+window.loadInventory = async function() {
+    if (typeof originalLoadInventory === 'function') {
+        await originalLoadInventory();
+    }
+    if (typeof populateHandoverCategories === 'function') {
+        populateHandoverCategories();
+    }
+    if (typeof loadNonInventoryLogs === 'function') {
+        loadNonInventoryLogs();
+    }
+};

@@ -681,6 +681,10 @@
                                 <i class="fas fa-file-pdf"></i>
                                 PDF
                             </button>
+                            <button class="export-btn barcode-all" id="exportBarcodeAllBtn" onclick="exportAllBarcodesPDF()" title="Export Seluruh Barcode Grid A4 Siap Cetak" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff;">
+                                <i class="fas fa-barcode"></i>
+                                Barcode Grid
+                            </button>
                         </div>
                     </div>
 
@@ -780,6 +784,17 @@
                                 </div>
 
                                 <form id="inventoryForm" class="handover-compact-form">
+                                    <!-- Mode Pendaftaran: Satuan vs Massal (Batch) (Point 2) -->
+                                    <div class="registration-mode-bar" style="margin-bottom: 14px; padding: 6px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; gap: 8px;">
+                                        <button type="button" class="mode-pill-btn active" id="btnModeSingle" onclick="switchRegistrationMode('single')" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: none; font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--primary); color: #fff; transition: all 0.2s;">
+                                            <i class="fas fa-cube"></i> Input Satuan (1 Unit)
+                                        </button>
+                                        <button type="button" class="mode-pill-btn" id="btnModeBatch" onclick="switchRegistrationMode('batch')" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: none; font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--text-secondary); transition: all 0.2s;">
+                                            <i class="fas fa-cubes"></i> Input Massal / Batch (Multi Unit)
+                                        </button>
+                                        <input type="hidden" id="registrationMode" value="single">
+                                    </div>
+
                                     <!-- Baris 1: Kategori & Merk -->
                                     <div class="compact-form-row">
                                         <div class="compact-field">
@@ -814,8 +829,40 @@
                                         </div>
                                     </div>
 
+                                    <!-- Batch Configuration Box (Visible only when Mode = Batch) -->
+                                    <div id="batchIntakeBox" style="display: none; margin-bottom: 14px; padding: 14px; background: rgba(59, 130, 246, 0.05); border: 1.5px dashed rgba(59, 130, 246, 0.35); border-radius: var(--radius-md);">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                            <span style="font-size: 13px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+                                                <i class="fas fa-layer-group"></i> Pengaturan Batch (Jumlah & SN Terpisah)
+                                            </span>
+                                            <span id="batchSnCountBadge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: var(--primary); font-weight: 600;">
+                                                0 / 5 SN Terisi
+                                            </span>
+                                        </div>
+                                        <div class="compact-form-row" style="margin-bottom: 10px;">
+                                            <div class="compact-field" style="max-width: 130px;">
+                                                <label><i class="fas fa-calculator"></i> Jumlah Unit <span class="required">*</span></label>
+                                                <input type="number" id="batchQty" min="2" max="100" value="5" oninput="syncBatchQuantity()" style="font-weight: 700;">
+                                            </div>
+                                            <div class="compact-field">
+                                                <label><i class="fas fa-magic"></i> Auto Generate Serial Number</label>
+                                                <div style="display: flex; gap: 6px;">
+                                                    <input type="text" id="batchPrefix" placeholder="Prefix (misal: KRS-2026-)" style="flex: 1;" value="KRS-2026-">
+                                                    <button type="button" class="export-btn" onclick="autoGenerateBatchSnList()" style="background: var(--primary); color: #fff; padding: 0 12px; font-size: 11.5px; white-space: nowrap;">
+                                                        <i class="fas fa-wand-magic-sparkles"></i> Buat SN Urut
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="compact-form-full">
+                                            <label><i class="fas fa-list-ol"></i> Daftar Serial Number (1 Baris = 1 SN Unit) <span class="required">*</span></label>
+                                            <textarea id="batchSnList" rows="4" placeholder="KRS-2026-001&#10;KRS-2026-002&#10;KRS-2026-003&#10;..." oninput="updateBatchSnCounter()" style="font-family: monospace; font-size: 12px;"></textarea>
+                                            <span style="font-size: 11px; color: var(--text-tertiary); margin-top: 3px; display: block;">Setiap baris akan didaftarkan sebagai 1 unit aset mandiri dengan nomor registrasi unik (INV-xxx) dan QR Code masing-masing.</span>
+                                        </div>
+                                    </div>
+
                                     <!-- Baris 2: Serial Number & SN Converter/Lokasi -->
-                                    <div class="compact-form-row">
+                                    <div class="compact-form-row" id="singleSnRow">
                                         <div class="compact-field">
                                             <label><i class="fas fa-barcode"></i> Serial Number (SN) <span
                                                     class="required">*</span></label>
@@ -1473,6 +1520,7 @@
                                 <option value="all">Semua Jenis Transaksi</option>
                                 <option value="Penerimaan">Penerimaan</option>
                                 <option value="Penyerahan">Penyerahan</option>
+                                <option value="Pengembalian">Pengembalian (Return)</option>
                             </select>
                             <select id="handoverViewLimit" class="filter-select view-limit"
                                 onchange="updateHandoverTable()">
@@ -1591,6 +1639,7 @@
                                                 <option value="">Pilih Jenis</option>
                                                 <option value="Penerimaan">Penerimaan (Baru)</option>
                                                 <option value="Penyerahan">Penyerahan</option>
+                                                <option value="Pengembalian">Pengembalian (Return)</option>
                                             </select>
                                         </div>
                                         <div class="compact-field">
@@ -2012,6 +2061,43 @@
                                 <p>Belum ada data barang non-inventaris</p>
                             </div>
                         </div>
+
+                        <!-- Riwayat Log Pengambilan & Mutasi Non-Inventaris (Point 6) -->
+                        <div class="recent-section" style="margin-top: 32px; padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                                <div>
+                                    <h3 style="font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 8px;">
+                                        <i class="fas fa-history" style="color: var(--primary);"></i> Log Pengambilan & Mutasi Non-Inventaris
+                                    </h3>
+                                    <span style="font-size: 12.5px; color: var(--text-secondary);">Catatan riwayat pengambilan ATK & konsumabel: siapa pengambil, tanggal, jumlah, dan keperluan</span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="export-btn excel" onclick="exportNonInventoryLogsToExcel()" title="Export Riwayat ke Excel" style="padding: 7px 14px; font-size: 12px;">
+                                        <i class="fas fa-file-excel"></i> Export Log Excel
+                                    </button>
+                                    <button class="export-btn" onclick="loadNonInventoryLogs()" title="Refresh Riwayat" style="padding: 7px 12px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary);">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-container handover-table-wrapper" style="overflow-x: auto;">
+                                <table class="data-table inventory-table-modern" id="nonInvLogsTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 170px;"><i class="far fa-calendar-alt"></i> Tanggal & Waktu</th>
+                                            <th><i class="fas fa-box"></i> Nama Barang</th>
+                                            <th style="width: 120px;"><i class="fas fa-exchange-alt"></i> Jenis Mutasi</th>
+                                            <th style="width: 90px; text-align: center;"><i class="fas fa-calculator"></i> Jumlah</th>
+                                            <th><i class="fas fa-user-tag"></i> Diambil Oleh / Petugas</th>
+                                            <th><i class="fas fa-clipboard-list"></i> Keperluan / Catatan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="nonInvLogsTableBody">
+                                        <tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-secondary);">Memuat log pengambilan...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2406,6 +2492,21 @@
                                 <div class="spec-tile-value notes-text" id="viewCatatan">-</div>
                             </div>
                         </div>
+
+                        <!-- Riwayat Siklus Hidup & Perpindahan Aset (Point 1) -->
+                        <div class="asset-lifecycle-box" style="margin-top: 16px; padding: 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                <span style="font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                                    <i class="fas fa-route" style="color: var(--primary);"></i> Riwayat Pergerakan & Status Operasional
+                                </span>
+                                <span id="viewItemCurrentStatusBadge" style="font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
+                                    Operasional
+                                </span>
+                            </div>
+                            <div id="viewItemLifecycleTimeline" class="lifecycle-timeline-container" style="display: flex; flex-direction: column; gap: 10px;">
+                                <!-- Injected dynamically by renderItemLifecycleTimeline(item) -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2775,6 +2876,28 @@
                                                                     </button>
                                                                 </div>
                                                                 <input type="hidden" id="scanSelectedCondition" value="Baik">
+
+                                                                <!-- Quick Relocation for Damaged Items (Point 7) -->
+                                                                <div id="scanRelocationBox" style="display: none; margin-top: 14px; padding: 12px; background: rgba(239, 68, 68, 0.08); border: 1.5px dashed rgba(239, 68, 68, 0.35); border-radius: var(--radius-md);">
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                                                        <span style="font-size: 12.5px; font-weight: 700; color: #ef4444; display: flex; align-items: center; gap: 6px;">
+                                                                            <i class="fas fa-dolly"></i> Pindahkan / Relokasi Unit Bermasalah
+                                                                        </span>
+                                                                        <span style="font-size: 11px; color: var(--text-secondary);">Otomatis lepas dari kubikel saat ini</span>
+                                                                    </div>
+                                                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                                                        <select id="scanRelocationSelect" style="flex: 1; padding: 8px 12px; border-radius: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); font-size: 12.5px;">
+                                                                            <option value="">-- Tetap di Lokasi Saat Ini --</option>
+                                                                            <option value="Gudang Rusak">Gudang Barang Rusak (Karantina)</option>
+                                                                            <option value="Ruang Servis IT">Ruang Servis IT / Rekanan</option>
+                                                                            <option value="Standby Gudang">Standby di Gudang</option>
+                                                                            <option value="Keluar Kantor">Keluar Kantor (Diservis Eksternal)</option>
+                                                                        </select>
+                                                                        <button type="button" class="export-btn" onclick="applyQuickRelocationInAudit()" style="background: #ef4444; color: #fff; padding: 0 14px; height: 36px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+                                                                            <i class="fas fa-check"></i> Simpan Relokasi
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
 
@@ -3328,7 +3451,7 @@
     </nav>
 
     <!-- Custom JavaScript -->
-    <script src="js/app.js?v=4.3.1"></script>
+    <script src="js/app.js?v=4.4.0"></script>
 </body>
 
 </html>
