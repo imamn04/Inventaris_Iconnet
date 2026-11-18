@@ -88,8 +88,8 @@ async function createHandover(data) {
     }
 
     if (invItem && targetItemId) {
-      const isPenyerahan = (data.jenis || '').toLowerCase().includes('serah') || (data.jenis || '').toLowerCase().includes('penyerahan');
-      const isPengembalian = (data.jenis || '').toLowerCase().includes('terima') || (data.jenis || '').toLowerCase().includes('pengembalian');
+      const isPengembalian = (data.jenis || '').toLowerCase().includes('kembali');
+      const isPenerimaan = !isPengembalian;
 
       const updatePayload = {};
       const newLokasi = String(data.lokasiBaru || '').trim();
@@ -107,7 +107,7 @@ async function createHandover(data) {
         updatePayload.kondisiAfter = String(data.kondisiAfter).trim();
       }
 
-      if (isPenyerahan) {
+      if (isPenerimaan) {
         if (!updatePayload.lokasi) {
           updatePayload.lokasi = `Digunakan ${data.pihakPenerima || 'User'}`;
         }
@@ -115,7 +115,7 @@ async function createHandover(data) {
 
         await prisma.history.create({
           data: {
-            action: 'MUTASI_PENYERAHAN',
+            action: 'MUTASI_PENERIMAAN',
             itemId: targetItemId,
             itemName: invItem.name || data.itemName,
             itemMerk: invItem.merk || data.itemMerk,

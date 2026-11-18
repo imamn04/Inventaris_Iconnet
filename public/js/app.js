@@ -6268,7 +6268,11 @@ function filteredHandoverData() {
 
     var filtered = handoverData.filter(function (h) {
         if (!h) return false;
-        if (jenisFilter !== 'all' && h.jenis !== jenisFilter) return false;
+        if (jenisFilter === 'Penerimaan') {
+            if ((h.jenis || '').toLowerCase().includes('kembali')) return false;
+        } else if (jenisFilter === 'Pengembalian') {
+            if (!(h.jenis || '').toLowerCase().includes('kembali')) return false;
+        }
         if (search) {
             var matchesSearch =
                 (h.item_id && h.item_id.toLowerCase().includes(search)) ||
@@ -6336,6 +6340,17 @@ function renderHandoverTable() {
     const nextBtn = document.getElementById('handoverNextBtn');
     const pageNumbers = document.getElementById('handoverPageNumbers');
 
+    const countAll = (handoverData || []).length;
+    const countPenerimaan = (handoverData || []).filter(x => !(x.jenis || '').toLowerCase().includes('kembali')).length;
+    const countPengembalian = (handoverData || []).filter(x => (x.jenis || '').toLowerCase().includes('kembali')).length;
+
+    const elAll = document.getElementById('countTabAll');
+    const elPen = document.getElementById('countTabPenerimaan');
+    const elPeng = document.getElementById('countTabPengembalian');
+    if (elAll) elAll.textContent = countAll;
+    if (elPen) elPen.textContent = countPenerimaan;
+    if (elPeng) elPeng.textContent = countPengembalian;
+
     if (totalItems === 0) {
         tableBody.innerHTML = '';
         if (emptyState) emptyState.style.display = 'block';
@@ -6346,10 +6361,24 @@ function renderHandoverTable() {
 
         tableBody.innerHTML = paginatedData.map(h => {
             const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
-            const isPenerimaan = (h.jenis || '').toLowerCase().includes('penerimaan');
-            const jenisClass = isReturn ? 'pill-pengembalian' : (isPenerimaan ? 'pill-penerimaan' : 'pill-penyerahan');
-            const jenisIcon = isReturn ? 'fa-undo' : (isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up');
+            const isPenerimaan = !isReturn;
+            const jenisClass = isReturn ? 'pill-pengembalian' : 'pill-penerimaan';
+            const jenisIcon = isReturn ? 'fa-undo' : 'fa-arrow-down';
+            const jenisLabel = isReturn ? 'Pengembalian' : 'Penerimaan';
             const tgl = formatTanggalIndonesia(h.tanggal_serah_terima) || '-';
+
+            // Check if this item has already been returned
+            const isAlreadyReturned = isPenerimaan && (handoverData || []).some(other => {
+                return other.id !== h.id && 
+                       (other.jenis || '').toLowerCase().includes('kembali') && 
+                       (other.item_id === h.item_id || (other.item_sn && h.item_sn && other.item_sn === h.item_sn));
+            });
+
+            const returnActionBtn = isPenerimaan
+                ? (isAlreadyReturned
+                    ? `<button type="button" class="btn-action-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); cursor: default;" title="Unit ini sudah dibuatkan BAST Pengembalian"><i class="fas fa-check-circle"></i></button>`
+                    : `<button type="button" class="btn-action-icon btn-return-action" onclick="triggerQuickReturn('${h.id}')" title="Proses Pengembalian Aset (Auto-Fill Form)" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.35);"><i class="fas fa-undo"></i></button>`)
+                : '';
 
             const condBefore = (h.kondisi_before || 'Baik').trim();
             const condAfter = (h.kondisi_after || 'Baik').trim();
@@ -6369,7 +6398,7 @@ function renderHandoverTable() {
                     </td>
                     <td>
                         <span class="handover-pill ${jenisClass}">
-                            <i class="fas ${jenisIcon}"></i> ${h.jenis || '-'}
+                            <i class="fas ${jenisIcon}"></i> ${jenisLabel}
                         </span>
                     </td>
                     <td>
@@ -6400,6 +6429,7 @@ function renderHandoverTable() {
                     </td>
                     <td>
                         <div class="table-actions-cluster">
+                            ${returnActionBtn}
                             <button class="btn-action-icon btn-view" onclick="openHandoverDetailModal('${h.id}')" title="Lihat Detail BASTB & TTD"><i class="fas fa-eye"></i></button>
                             <button class="btn-action-icon btn-edit" onclick="openEditHandoverModal('${h.id}')" title="Edit Data Serah Terima"><i class="fas fa-edit"></i></button>
                             <button class="btn-action-icon btn-pdf" onclick="generateBA_pdf('${h.id}')" title="Download BASTB PDF"><i class="fas fa-file-pdf"></i></button>
@@ -10742,3 +10772,106 @@ window.loadInventory = async function() {
         loadNonInventoryLogs();
     }
 };
+
+// --- QUICK RETURN WORKFLOW & TAB FILTERS ---
+function setHandoverFilterTab(tab) {
+    const btnAll = document.getElementById('tabBtnHandoverAll');
+    const btnPen = document.getElementById('tabBtnHandoverPenerimaan');
+    const btnPeng = document.getElementById('tabBtnHandoverPengembalian');
+    const select = document.getElementById('handoverJenisFilter');
+
+    if (btnAll) btnAll.classList.toggle('active', tab === 'all');
+    if (btnPen) btnPen.classList.toggle('active', tab === 'Penerimaan');
+    if (btnPeng) btnPeng.classList.toggle('active', tab === 'Pengembalian');
+
+    if (select) {
+        select.value = tab;
+    }
+    updateHandoverTable();
+}
+window.setHandoverFilterTab = setHandoverFilterTab;
+
+async function triggerQuickReturn(handoverId) {
+    const h = (handoverData || []).find(item => item.id === handoverId);
+    if (!h) {
+        showToast('Data transaksi serah terima tidak ditemukan!', 'error');
+        return;
+    }
+
+    // 1. Switch to BAST Input Page
+    if (typeof navigateToPage === 'function') {
+        navigateToPage('handover-input');
+    }
+
+    // 2. Set Jenis Transaksi to Pengembalian
+    const jenisSelect = document.getElementById('handoverJenis');
+    if (jenisSelect) {
+        jenisSelect.value = 'Pengembalian';
+    }
+    toggleHandoverFields();
+
+    // 3. Clear No BA (Manual / Copy-Paste from Central Sheet, or click Auto No)
+    const noBaInput = document.getElementById('handoverNoBA');
+    if (noBaInput) {
+        noBaInput.value = '';
+        noBaInput.placeholder = 'Ketik/Paste No. BA dari Sheet Pusat, atau klik Auto No';
+    }
+
+    // 4. Set Tanggal Serah Terima to Today
+    const tglInput = document.getElementById('handoverTanggal');
+    if (tglInput) {
+        tglInput.valueAsDate = new Date();
+        if (typeof updateTanggalTerbilangPreview === 'function') {
+            updateTanggalTerbilangPreview(tglInput.value);
+        }
+    }
+
+    // 5. Populate & Select Category
+    const katSelect = document.getElementById('handoverKategori');
+    if (katSelect) {
+        katSelect.value = h.item_name || '';
+    }
+    await loadItemsByCategory();
+
+    // 6. Select Item
+    const itemSelect = document.getElementById('handoverItem');
+    if (itemSelect) {
+        itemSelect.value = h.item_id || '';
+    }
+    if (typeof loadHandoverItemDetails === 'function') {
+        loadHandoverItemDetails();
+    }
+
+    // 7. Auto-fill Parties: Pengembali is previous receiver (Karyawan pemegang aset)
+    const dariInput = document.getElementById('handoverDari');
+    if (dariInput) dariInput.value = h.pihak_penerima || '';
+
+    const nipInput = document.getElementById('handoverNip');
+    if (nipInput) nipInput.value = h.nip || h.nip_pengguna || '';
+
+    const emailInput = document.getElementById('handoverEmail');
+    if (emailInput) emailInput.value = h.email || h.email_dinas || '';
+
+    const hpInput = document.getElementById('handoverHp');
+    if (hpInput) hpInput.value = h.hp || h.no_hp || '';
+
+    // 8. Receiver is Technical Support / Gudang
+    const kepadaInput = document.getElementById('handoverKepada');
+    if (kepadaInput) kepadaInput.value = 'Technical Support / Tim Aset';
+
+    // 9. New Location defaults to Standby Gudang
+    const locInput = document.getElementById('handoverLokasi');
+    if (locInput) locInput.value = 'Gudang Penyimpanan (Standby)';
+
+    // 10. Kondisi Before defaults to previous Kondisi After or Baik
+    const condBefore = document.getElementById('handoverKondisiBefore');
+    if (condBefore) condBefore.value = h.kondisi_after || h.kondisi_before || 'Baik';
+
+    // 11. Focus on No BA input for seamless workflow
+    setTimeout(() => {
+        if (noBaInput) noBaInput.focus();
+    }, 200);
+
+    showToast(`Form Pengembalian untuk ${h.pihak_penerima || 'Karyawan'} siap! Masukkan No. BA dari Sheet Pusat.`, 'info');
+}
+window.triggerQuickReturn = triggerQuickReturn;

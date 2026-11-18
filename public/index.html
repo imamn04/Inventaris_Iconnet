@@ -1510,6 +1510,19 @@
                 <!-- Handover Data Page (Tabel) -->
                 <!-- Handover Data Page (Full-Width Responsive Table) -->
                 <div class="page" id="handover-dataPage">
+                    <!-- Segmented Tabs Filter: Semua | Penerimaan (Dipakai) | Pengembalian (Return) -->
+                    <div class="handover-tabs-nav" style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+                        <button type="button" class="zone-pill-btn active" id="tabBtnHandoverAll" onclick="setHandoverFilterTab('all')" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px;">
+                            <i class="fas fa-list-ul"></i> Semua Transaksi (<span id="countTabAll">0</span>)
+                        </button>
+                        <button type="button" class="zone-pill-btn" id="tabBtnHandoverPenerimaan" onclick="setHandoverFilterTab('Penerimaan')" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px;">
+                            <i class="fas fa-arrow-down" style="color: #10b981;"></i> Penerimaan / Aset Dipakai (<span id="countTabPenerimaan">0</span>)
+                        </button>
+                        <button type="button" class="zone-pill-btn" id="tabBtnHandoverPengembalian" onclick="setHandoverFilterTab('Pengembalian')" style="padding: 8px 16px; font-size: 12.5px; border-radius: 8px;">
+                            <i class="fas fa-undo" style="color: #f59e0b;"></i> Riwayat Pengembalian (<span id="countTabPengembalian">0</span>)
+                        </button>
+                    </div>
+
                     <div class="inventory-header">
                         <div class="search-filter">
                             <div class="search-box">
@@ -1518,8 +1531,7 @@
                             </div>
                             <select id="handoverJenisFilter" class="filter-select">
                                 <option value="all">Semua Jenis Transaksi</option>
-                                <option value="Penerimaan">Penerimaan</option>
-                                <option value="Penyerahan">Penyerahan</option>
+                                <option value="Penerimaan">Penerimaan (Baru)</option>
                                 <option value="Pengembalian">Pengembalian (Return)</option>
                             </select>
                             <select id="handoverViewLimit" class="filter-select view-limit"
@@ -1638,7 +1650,6 @@
                                             <select id="handoverJenis" required onchange="toggleHandoverFields()">
                                                 <option value="">Pilih Jenis</option>
                                                 <option value="Penerimaan">Penerimaan (Baru)</option>
-                                                <option value="Penyerahan">Penyerahan</option>
                                                 <option value="Pengembalian">Pengembalian (Return)</option>
                                             </select>
                                         </div>
@@ -1653,7 +1664,7 @@
                                                 </button>
                                             </div>
                                             <input type="text" id="handoverNoBA"
-                                                placeholder="Contoh: SMG08.006/ICONNET/BASTB/..." required>
+                                                placeholder="Ketik/Paste No. BA dari Sheet Pusat, atau klik Auto No" value="" required>
                                         </div>
                                         <div class="compact-field">
                                             <label><i class="fas fa-calendar-alt"></i> Tanggal Serah Terima <span
@@ -2270,8 +2281,8 @@
                                 <div class="compact-field">
                                     <label for="editHandoverJenis">Jenis Transaksi <span class="req">*</span></label>
                                     <select id="editHandoverJenis" required>
-                                        <option value="Penerimaan">Penerimaan (Dari User)</option>
-                                        <option value="Penyerahan">Penyerahan (Ke User)</option>
+                                        <option value="Penerimaan">Penerimaan (Baru)</option>
+                                        <option value="Pengembalian">Pengembalian (Return)</option>
                                     </select>
                                 </div>
                                 <div class="compact-field">
@@ -3451,7 +3462,7 @@
     </nav>
 
     <!-- Custom JavaScript -->
-    <script src="js/app.js?v=4.4.0"></script>
+    <script src="js/app.js?v=4.4.1"></script>
 </body>
 
 </html>
