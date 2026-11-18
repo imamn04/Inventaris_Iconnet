@@ -81,8 +81,12 @@ function generateBASTPDF(data, res) {
   const h1 = 48;
   const rawItemName = (data.item_name || data.itemName || 'LAPTOP').toUpperCase();
   const titleItem = rawItemName.includes('LAPTOP') ? 'LAPTOP' : (rawItemName.includes('MONITOR') ? 'MONITOR' : (rawItemName.includes('PC') ? 'PC / DESKTOP' : rawItemName));
+  const isReturn = (data.jenis || '').toLowerCase().includes('kembali');
+  const docActionTitle = isReturn ? 'PENGEMBALIAN' : 'SERAH TERIMA';
+  const openActionText = isReturn ? 'telah dikembalikan ke ' : 'telah diterima ke ';
+
   doc.rect(boxX, y1, boxW, h1).lineWidth(1).stroke('#000000');
-  doc.fontSize(11).font(fontBold).fillColor('#000000').text(`BERITA ACARA SERAH TERIMA ${titleItem}`, boxX, y1 + 7, { align: 'center', width: boxW });
+  doc.fontSize(11).font(fontBold).fillColor('#000000').text(`BERITA ACARA ${docActionTitle} ${titleItem}`, boxX, y1 + 7, { align: 'center', width: boxW });
   doc.fontSize(9.5).font(fontBold).text('CONTACT CENTER RITEL SITE SEMARANG', boxX, y1 + 21, { align: 'center', width: boxW });
   doc.fontSize(9.5).font(fontBold).text(noBA, boxX, y1 + 33, { align: 'center', width: boxW });
 
@@ -116,7 +120,7 @@ function generateBASTPDF(data, res) {
      .font(fontRegular).text(' Tahun ', { continued: true })
      .font(fontBold).text(`${tahunTerbilang} (${tglNumerik})`, { continued: true })
      .font(fontRegular).text(', kami yang bertanda tangan ', { continued: true })
-     .font(fontRegular).text('dibawah ini menyatakan bahwa Perangkat telah diterima ke ', { continued: true })
+     .font(fontRegular).text(`dibawah ini menyatakan bahwa Perangkat ${openActionText}`, { continued: true })
      .font(fontBold).text('Technical Support', { continued: true })
      .font(fontRegular).text(' dengan rincian sebagai berikut:');
 
