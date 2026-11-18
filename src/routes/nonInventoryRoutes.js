@@ -11,6 +11,15 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/logs', async (req, res) => {
+  try {
+    const logs = await nonInventoryService.getMutationLogs();
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const item = await nonInventoryService.createNonInventory(req.body);

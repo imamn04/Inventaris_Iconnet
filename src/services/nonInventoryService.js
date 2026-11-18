@@ -141,11 +141,32 @@ async function adjustStock(id, type, amount, reason, operator) {
   return updated;
 }
 
+async function getMutationLogs() {
+  const logs = await prisma.history.findMany({
+    where: {
+      action: { in: ['STOCK_IN', 'STOCK_OUT', 'CREATE_NON_INV', 'UPDATE_NON_INV', 'DELETE_NON_INV'] }
+    },
+    orderBy: { timestamp: 'desc' },
+    take: 200
+  });
+  return logs.map(l => ({
+    id: l.id,
+    action: l.action,
+    itemId: l.itemId,
+    itemName: l.itemName,
+    itemMerk: l.itemMerk,
+    itemLokasi: l.itemLokasi,
+    details: l.details,
+    timestamp: l.timestamp ? l.timestamp.toISOString() : null
+  }));
+}
+
 module.exports = {
   getAllNonInventory,
   createNonInventory,
   updateNonInventory,
   deleteNonInventory,
-  adjustStock
+  adjustStock,
+  getMutationLogs
 };
 
