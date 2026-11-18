@@ -6265,7 +6265,7 @@ function sortHandoverTable(key) {
 // Helper to get lifecycle status of a handover record (Active, Returned, or Return Record)
 function getHandoverItemLifecycle(h) {
     if (!h) return { isReturn: false, isAlreadyReturned: false, returnRecord: null, isCurrentActiveHolder: false };
-    const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+    const isReturn = /kembali|pengembalian|return/i.test(h.jenis || '');
     if (isReturn) {
         return { isReturn: true, isAlreadyReturned: false, returnRecord: null, isCurrentActiveHolder: false };
     }
@@ -6276,7 +6276,7 @@ function getHandoverItemLifecycle(h) {
     // Look for a subsequent return record for this asset
     const returnRecord = (handoverData || []).find(other => {
         if (String(other.id) === String(h.id)) return false;
-        const otherIsReturn = (other.jenis || '').toLowerCase().includes('kembali');
+        const otherIsReturn = /kembali|pengembalian|return/i.test(other.jenis || '');
         if (!otherIsReturn) return false;
 
         const isSameItem = (other.item_id && h.item_id && String(other.item_id).trim().toLowerCase() === String(h.item_id).trim().toLowerCase()) ||
@@ -6389,7 +6389,7 @@ function renderHandoverTable() {
         const lc = getHandoverItemLifecycle(h);
         return !lc.isReturn && !lc.isAlreadyReturned;
     }).length;
-    const countPengembalian = (handoverData || []).filter(x => (x.jenis || '').toLowerCase().includes('kembali')).length;
+    const countPengembalian = (handoverData || []).filter(x => /kembali|pengembalian|return/i.test(x.jenis || '')).length;
 
     const elAll = document.getElementById('countTabAll');
     const elPen = document.getElementById('countTabPenerimaan');
@@ -7094,7 +7094,7 @@ async function generateBA_excel(id) {
         const nomorBA = data.no_berita_acara || data.noBeritaAcara || generateNomorBA(data.tanggal_serah_terima, data.id);
         const rawItemName = (data.item_name || data.itemName || 'LAPTOP').toUpperCase();
         const titleItem = rawItemName.includes('LAPTOP') ? 'LAPTOP' : (rawItemName.includes('MONITOR') ? 'MONITOR' : (rawItemName.includes('PC') ? 'PC / DESKTOP' : rawItemName));
-        const isReturn = (data.jenis || '').toLowerCase().includes('kembali');
+        const isReturn = /kembali|pengembalian|return/i.test(data.jenis || '');
         const docActionTitle = isReturn ? 'PENGEMBALIAN' : 'SERAH TERIMA';
         const openActionText = isReturn ? 'telah dikembalikan ke ' : 'telah diterima ke ';
 
@@ -10263,7 +10263,7 @@ function renderItemLifecycleTimeline(item) {
     }).sort((a, b) => new Date(a.tanggal_serah_terima) - new Date(b.tanggal_serah_terima));
 
     itemHandovers.forEach(h => {
-        const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+        const isReturn = /kembali|pengembalian|return/i.test(h.jenis || '');
         const isPenerimaan = (h.jenis || '').toLowerCase().includes('penerimaan');
         const icon = isReturn ? 'fa-undo' : (isPenerimaan ? 'fa-arrow-down' : 'fa-arrow-up');
         const badgeText = isReturn ? 'Pengembalian' : (isPenerimaan ? 'Penerimaan' : 'Penyerahan Operasional');
@@ -10999,7 +10999,7 @@ function openAssetHistoryTimeline(itemId, itemSn) {
         statusPillHtml = `<span style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-warehouse"></i> Standby di Gudang (Belum ada BAST)</span>`;
     } else {
         const latest = handovers[handovers.length - 1];
-        const isReturn = (latest.jenis || '').toLowerCase().includes('kembali');
+        const isReturn = /kembali|pengembalian|return/i.test(latest.jenis || '');
         if (isReturn) {
             statusPillHtml = `<span style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.35); padding: 5px 12px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"><i class="fas fa-warehouse"></i> Standby di Gudang (Telah Kembali)</span>`;
         } else {
@@ -11082,7 +11082,7 @@ function openAssetHistoryTimeline(itemId, itemSn) {
         `;
     } else {
         handovers.forEach((h) => {
-            const isReturn = (h.jenis || '').toLowerCase().includes('kembali');
+            const isReturn = /kembali|pengembalian|return/i.test(h.jenis || '');
             const dotClass = isReturn ? 'dot-pengembalian' : 'dot-penerimaan';
             const dotIcon = isReturn ? 'fa-undo' : 'fa-arrow-down';
             const titleColor = isReturn ? '#f59e0b' : '#10b981';

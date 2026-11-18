@@ -81,7 +81,7 @@ function generateBASTPDF(data, res) {
   const h1 = 48;
   const rawItemName = (data.item_name || data.itemName || 'LAPTOP').toUpperCase();
   const titleItem = rawItemName.includes('LAPTOP') ? 'LAPTOP' : (rawItemName.includes('MONITOR') ? 'MONITOR' : (rawItemName.includes('PC') ? 'PC / DESKTOP' : rawItemName));
-  const isReturn = (data.jenis || '').toLowerCase().includes('kembali');
+  const isReturn = /kembali|pengembalian|return/i.test(data.jenis || '');
   const docActionTitle = isReturn ? 'PENGEMBALIAN' : 'SERAH TERIMA';
   const openActionText = isReturn ? 'telah dikembalikan ke ' : 'telah diterima ke ';
 

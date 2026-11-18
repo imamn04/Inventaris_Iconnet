@@ -88,7 +88,7 @@ async function createHandover(data) {
     }
 
     if (invItem && targetItemId) {
-      const isPengembalian = (data.jenis || '').toLowerCase().includes('kembali');
+      const isPengembalian = /kembali|pengembalian|return/i.test(data.jenis || '');
       const isPenerimaan = !isPengembalian;
 
       const updatePayload = {};
